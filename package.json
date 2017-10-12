@@ -1,0 +1,36 @@
+{
+  "name": "foglet-overlay",
+  "version": "0.0.0",
+  "description": "Implementaion of different T-Man overlay to use with foglet-core ",
+  "main": "foglet-overlay.js",
+  "scripts": {
+    "test": "foglet-scripts test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RAN3D/foglet-overlay.git"
+  },
+  "keywords": [
+    "foglet-core",
+    "overlay",
+    "t-man"
+  ],
+  "author": "Folkvir",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RAN3D/foglet-overlay/issues"
+  },
+  "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
+  "devDependencies": {
+    "foglet-core": "^3.1.1",
+    "foglet-scripts": "^0.2.0",
+    "karma-firefox-launcher": "^1.0.1"
+  },
+  "foglet-scripts": {
+    "browsers": [
+      "Firefox"
+    ],
+    "lint": false
+  },
+  "dependencies": {}
+}
