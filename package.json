@@ -22,8 +22,8 @@
   },
   "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
   "devDependencies": {
-    "foglet-core": "^3.1.1",
-    "foglet-scripts": "^0.2.0",
+    "babel-core": "^6.26.0",
+    "foglet-scripts": "^0.2.2",
     "karma-firefox-launcher": "^1.0.1"
   },
   "foglet-scripts": {
@@ -32,5 +32,7 @@
     ],
     "lint": false
   },
-  "dependencies": {}
+  "dependencies": {
+    "foglet-core": "^3.1.1"
+  }
 }
