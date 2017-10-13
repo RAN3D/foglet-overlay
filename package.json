@@ -33,6 +33,7 @@
     "lint": false
   },
   "dependencies": {
-    "foglet-core": "^3.1.1"
+    "foglet-core": "^3.1.1",
+    "vivaldi-coordinates": "^1.0.0"
   }
 }
