@@ -1,5 +1,7 @@
 'use strict';
 
+const LatencyOverlay = require('./src/latency-overlay.js');
+
 module.exports = {
-	latencyOverlay: require('./src/latency-overlay.js')
+	latencyOverlay: LatencyOverlay
 }

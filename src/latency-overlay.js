@@ -1,7 +1,13 @@
-const Foglet = require('foglet-core');
+const TMan = require('foglet-core/src/network/abstract/tman-overlay.js');
+console.log(TMan);
 const vivaldi = require('vivaldi-coordinates');
 
-class LatencyOverlay extends Foglet.abstract.tman{
+
+class LatencyOverlay extends TMan{
+  constructor (...args) {
+    super(...args)
+  }
+
 	_startDescriptor () {
     return { coordinates: vivaldi.create() };
   }

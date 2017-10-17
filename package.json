@@ -4,6 +4,7 @@
   "description": "Implementaion of different T-Man overlay to use with foglet-core ",
   "main": "foglet-overlay.js",
   "scripts": {
+    "build": "foglet-scripts build",
     "test": "foglet-scripts test"
   },
   "repository": {
@@ -23,17 +24,31 @@
   "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
   "devDependencies": {
     "babel-core": "^6.26.0",
-    "foglet-scripts": "^0.2.2",
+    "foglet-scripts": "git+https://github.com/ran3d/foglet-scripts.git#webpack-external",
     "karma-firefox-launcher": "^1.0.1"
   },
   "foglet-scripts": {
     "browsers": [
       "Firefox"
     ],
-    "lint": false
+    "timeout": 20000,
+    "lint": false,
+    "webpack": "./config/babel-loader.config.js",
+    "build": {
+      "entry": "./foglet-overlay.js",
+      "output": {
+        "filename": "overlay.bundle.js",
+        "library": "overlay",
+        "libraryTarget": "umd",
+        "umdNamedDefine": true
+      },
+      "webpack": {
+        "externalConfig": "./config/webpack.config.js"
+      }
+    }
   },
   "dependencies": {
-    "foglet-core": "^3.1.1",
+    "foglet-core": "git+https://github.com/ran3d/foglet-core.git",
     "vivaldi-coordinates": "^1.0.0"
   }
 }
