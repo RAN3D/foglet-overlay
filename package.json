@@ -23,7 +23,6 @@
   },
   "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
   "devDependencies": {
-    "babel-core": "^6.26.0",
     "foglet-scripts": "git+https://github.com/ran3d/foglet-scripts.git#webpack-external",
     "karma-firefox-launcher": "^1.0.1"
   },
@@ -49,6 +48,7 @@
   },
   "dependencies": {
     "foglet-core": "git+https://github.com/ran3d/foglet-core.git",
+    "lodash.merge": "^4.6.0",
     "vivaldi-coordinates": "^1.0.0"
   }
 }

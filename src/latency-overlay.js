@@ -1,18 +1,18 @@
 const TMan = require('foglet-core/src/network/abstract/tman-overlay.js');
 const vivaldi = require('vivaldi-coordinates');
 const debug = require('debug')('overlay:latency')
+const lmerge = require('lodash.merge');
 
 class LatencyOverlay extends TMan{
-  constructor(manager, options){
-    console.log(options);
-    super(manager, options.options);
-    this._rps.parent.once('open', () => {
-      debug('Parent connected, engage TMan.');
-      this._rps._start();
-    });
-  }
-
 	_startDescriptor () {
+    this.intervalPing = setInterval(() => {
+        console.log('Neighbours: ', this.getNeighbours())
+        this..forEach(peer => {
+          this._ping(peer).then((rtt) => {
+            vivaldi.update(rtt, this._descriptor.coordinates)
+          });
+        });
+    }, this._descriptorTimeout());
     let viv = vivaldi.create();
     debug('StartDescriptor: ', viv);
     return { coordinates: viv };
