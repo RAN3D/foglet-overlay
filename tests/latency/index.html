@@ -63,7 +63,7 @@
         for(let i=0;i<max;++i){
           graph.add({
             id: foglets[i].id,
-            name: i,
+            name: i+1,
             me: false
           });
         }
@@ -75,10 +75,11 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
+        verify();
       }
 
       setTimeout(createGraph, reloadTime);
-      setInterval(reloadGraph, reloadTime);
+      setTimeout(setInterval(reloadGraph, reloadTime), reloadTime);
 
       function reloadGraph() {
         graph.destroy();
@@ -99,10 +100,11 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
+        verify()
       }
 
       function verify() {
-        
+        let falseNb = 0, trueNb = 0;
         foglets.forEach(fog=> {
           let neigh = fog.overlay('latency').network.getNeighbours();
           let check = true;
@@ -115,6 +117,10 @@
               console.log('higher - Foglet: ', fog.id, ' peer: ', revertedIndex.get(peer), ' check: ', check);
             }
           })
+          if(check) 
+            trueNb++;
+          else 
+            falseNb++;
         });
         
         if(falseNb !== 1 && trueNb !== max-1) document.getElementById('verified').innerHTML = "Verified at cycle:"+cycle;
