@@ -1,6 +1,6 @@
 module.exports = {
   test: /\.js$/,
-  exclude: /(node_modules|bower_components)\/(?!(foglet-core)\/).*/,
+  exclude: () => true,
   use: {
     loader: 'babel-loader',
     options: {

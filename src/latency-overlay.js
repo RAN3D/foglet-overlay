@@ -79,8 +79,8 @@ class LatencyOverlay extends TMan{
       new vivaldi.HeightCoordinates(descriptorB.coordinates._coordinates.x, descriptorB.coordinates._coordinates.y, descriptorB.coordinates._coordinates.h)
     );
     debug('Raking: (da,db) = ', `(${da},${db})`);
-    return da < db;
-	}
+    return da - db;
+  }
 		/**
 	 * Utility: Ping the specified id
 	 * @param  {string} id id of the peer to ping

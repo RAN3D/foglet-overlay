@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
   "devDependencies": {
+    "babel-preset-es2015": "^6.24.1",
     "foglet-scripts": "git+https://github.com/ran3d/foglet-scripts.git#webpack-external",
     "karma-firefox-launcher": "^1.0.1",
     "p2p-graph": "^1.2.1"

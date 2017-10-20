@@ -1,4 +1,120 @@
-<script src='../dist/overlay.bundle.js'></script>
-<script>
-  console.log(overlay)
-</script>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>latency exemple</title>
+    <script src='../../dist/overlay.bundle.js'></script>
+    <script src='../../node_modules/p2p-graph/p2p-graph.min.js'></script>
+    <style>
+      .graph {
+        width: 100%;
+        height: 100%;      
+      }           
+    </style>
+  </head>
+
+  <body>
+
+    <div id='graph'></div>
+    <script>
+      console.log(overlay)
+      localStorage.debug = '-core:*,overlay*'
+      let foglets = [];
+      const max = 10;
+      const reloadTime =10000;
+      let graph = undefined;
+      let revertedIndex = new Map();
+      let revertedName = new Map();
+
+      for(let i = 0; i<max;++i){
+        foglets.push(new overlay.foglet.Foglet({
+          overlays: [
+            {
+              name: 'latency',
+              class: overlay.latencyOverlay,
+              options: {
+                fakeRtt: i+1,
+                partialViewSize: 1,
+                delta: 10000,
+                timeout: 10000,
+                protocol: "testsoverlaylatency",
+                signaling: {
+                  address: "https://signaling.herokuapp.com/",
+                  room: "stests"
+                }
+              }
+            }
+          ]
+        }))
+        revertedIndex.set(foglets[i].inViewID, foglets[i].id);
+        revertedName.set(foglets[i].inViewID, i);
+      }
+
+      foglets.reduce((prev, cur, ind) => {
+        cur.share();
+        return cur.connection();
+      }, Promise.resolve())
+
+      function createGraph() {
+        document.getElementById('graph').innerHTML = "<div class='graph'></div>";
+        graph = new window.P2PGraph('.graph');
+        for(let i=0;i<max;++i){
+          graph.add({
+            id: foglets[i].id,
+            name: i,
+            me: false
+          });
+        }
+        for(let i =0;i<max;++i){
+          foglets[i].overlay('latency').network.getNeighbours().forEach(peer => {
+            !graph.hasLink(foglets[i].id, revertedIndex.get(peer)) &&
+              graph.connect(foglets[i].id, revertedIndex.get(peer));
+          });
+        }
+      }
+
+      setTimeout(createGraph, reloadTime);
+      setInterval(reloadGraph, reloadTime);
+
+      function reloadGraph() {
+        graph.destroy();
+        document.getElementById('graph').innerHTML = "<div class='graph'></div>";
+        graph = new window.P2PGraph('.graph');
+        for(let i=0;i<max;++i){
+         graph.add({
+          id: foglets[i].id,
+          name: i,
+          me: false
+         });
+        }
+        for(let i =0;i<max;++i){
+          foglets[i].overlay('latency').network.getNeighbours().forEach(peer => {
+            !graph.hasLink(foglets[i].id, revertedIndex.get(peer)) &&
+              graph.connect(foglets[i].id, revertedIndex.get(peer));
+          });
+        }
+      }
+
+      function verify() {
+        
+        foglets.forEach(fog=> {
+          let neigh = fog.overlay('latency').network.getNeighbours();
+          let check = true;
+          neigh.forEach(peer => {
+            if(revertedName.get(peer) < revertedName.get(fog.inViewID)) {
+              check = check && true;
+              console.log('Lower - Foglet: ', fog.id, ' peer: ', revertedIndex.get(peer), ' check: ', check);
+            } else {
+              check= check && false;
+              console.log('higher - Foglet: ', fog.id, ' peer: ', revertedIndex.get(peer), ' check: ', check);
+            }
+          })
+        });
+        return check;
+      }
+    </script>
+  </body>
+
+</html>
+
+

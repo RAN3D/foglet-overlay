@@ -1,7 +1,7 @@
 'use strict';
 
-const LatencyOverlay = require('./src/latency-overlay.js');
 
 module.exports = {
-	latencyOverlay: LatencyOverlay
+	latencyOverlay: require('./src/latency-overlay.js'),
+	foglet: require('foglet-core')
 }
