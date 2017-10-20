@@ -14,13 +14,15 @@
   </head>
 
   <body>
-
+    <div id='cycle'></div>
+    <div id='verified'></div>
     <div id='graph'></div>
     <script>
       console.log(overlay)
       localStorage.debug = '-core:*,overlay*'
       let foglets = [];
       const max = 10;
+      let cycle = 0;
       const reloadTime =10000;
       let graph = undefined;
       let revertedIndex = new Map();
@@ -35,7 +37,7 @@
               options: {
                 fakeRtt: i+1,
                 partialViewSize: 1,
-                delta: 10000,
+                delta: reloadTime,
                 timeout: 10000,
                 protocol: "testsoverlaylatency",
                 signaling: {
@@ -71,6 +73,8 @@
               graph.connect(foglets[i].id, revertedIndex.get(peer));
           });
         }
+        cycle++;
+        document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
       }
 
       setTimeout(createGraph, reloadTime);
@@ -93,6 +97,8 @@
               graph.connect(foglets[i].id, revertedIndex.get(peer));
           });
         }
+        cycle++;
+        document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
       }
 
       function verify() {
@@ -110,7 +116,8 @@
             }
           })
         });
-        return check;
+        
+        if(falseNb !== 1 && trueNb !== max-1) document.getElementById('verified').innerHTML = "Verified at cycle:"+cycle;
       }
     </script>
   </body>
