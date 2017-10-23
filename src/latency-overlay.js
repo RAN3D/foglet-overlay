@@ -13,7 +13,12 @@ class LatencyOverlay extends TMan{
     // specific options
     this.partialViewSize = this.options.partialViewSize || 5;
     this._rps._partialViewSize = () => this.partialViewSize;
-    this.fakeRtt = this.options.fakeRtt || undefined;
+    this.fakeRtt = {
+      model: this.options.fakeRtt.model || [[]],
+      compute: (peer) => {
+        return this.fakeRtt.model[this.id][peer];
+      }
+    };
 
     // internal communications
     this.communication = new Communication(this, this.options.procotol+'-internal');
@@ -37,7 +42,6 @@ class LatencyOverlay extends TMan{
             const obj = this._rps.cache.get(peer).coordinates._coordinates;
             const remoteCoordinates = vivaldi.create(new vivaldi.HeightCoordinates(obj.x, obj.y, obj.h));
             this._ping(peer).then((rtt) => {
-              debug(`Ping: (${peer},${rtt})`);
               vivaldi.update(rtt, this.descriptor.coordinates, remoteCoordinates);
               this.communication.sendUnicast(peer, {
                 type: 'update-descriptor',
@@ -55,7 +59,6 @@ class LatencyOverlay extends TMan{
   }
 
   _updateDescriptor(id, descriptor) {
-    debug('Descriptor updated:', id, descriptor);
     const cache = this._rps.cache;
     if(!cache.has(id)){
       cache.add(id, descriptor);
@@ -78,7 +81,6 @@ class LatencyOverlay extends TMan{
       new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h), neighbours.descriptor.coordinates),
       new vivaldi.HeightCoordinates(descriptorB.coordinates._coordinates.x, descriptorB.coordinates._coordinates.y, descriptorB.coordinates._coordinates.h)
     );
-    debug('Raking: (da,db) = ', `(${da},${db})`);
     return da - db;
   }
 		/**
@@ -106,7 +108,7 @@ class LatencyOverlay extends TMan{
 					if(msg.id === idMessage) {
 						let time = (new Date()).getTime() - pingTime;
             if(this.fakeRtt)
-              resolve(this.fakeRtt);
+              resolve(this.fakeRtt.compute(id));
             else
               resolve(time);
 					}
