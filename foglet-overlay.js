@@ -2,6 +2,6 @@
 
 
 module.exports = {
-	latencyOverlay: require('./src/latency-overlay.js'),
+	latencyVivaldiOverlay: require('./src/latency-vivaldi-overlay.js'),
 	foglet: require('foglet-core')
 }

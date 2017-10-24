@@ -21,20 +21,30 @@
     <script>
       console.log(overlay)
       localStorage.debug = '-core:*,overlay*'
-      let foglets = [];
+      // params
       const max = 10;
+      const reloadTime =10 * 1000;
+      const descriptorTimeout = 5 * 1000;
+      const partialViewSize = 5;
+      const sampleSize = 4;
+      const timeout = 10 * 1000;
+
+      // variables
       let cycle = 0;
-      const reloadTime =10000;
+      let foglets = [];
       let graph = undefined;
       let revertedIndex = new Map();
       let revertedName = new Map();
       let latencies = [];
+      let bestlatencies = [];
+
+      // create fake latencies
       for(let i = 0; i<max;++i){
         let temp_latencies = [];
         for(let j=0;j<max;j++) {
-          temps_latencies.push(j);
+          temp_latencies.push(j);
         }
-        latencies.push(temps_latencies);
+        latencies.push(temp_latencies);
       }
       for(let i = 0; i<max;++i){
         for(let j=0;j<max;j++) {
@@ -45,16 +55,40 @@
             latencies[j][i] = i+j;
           }
         }
+      }
+      console.log('Fake latencies for our overlays: ');
+      console.table(latencies);
+
+      // create the best latencies for each Clients
+
+      for(let i = 0; i<max;++i){
+        let sort = latencies[i].slice().sort((a, b) => {
+          if(a < b) return 1;
+          if(a === b) return 0;
+          return -1;
+        });
+        let clone = sort.slice().filter(x => x !== 0);
+        // console.log(sort);
+        let best = [];
+        for(let j = 0; j < partialViewSize; j++){
+          best.push(clone.pop());
+        }
+        // console.log(best);
+        bestlatencies.push(best);
+      }
+      console.log('Best latencies to reach: ');
+      console.table(bestlatencies);
+
+      for(let i = 0; i<max;++i){
         foglets.push(new overlay.foglet.Foglet({
           overlays: [
             {
               name: 'latency',
-              class: overlay.latencyOverlay,
+              class: overlay.latencyVivaldiOverlay,
               options: {
-                fakeRtt: {model: latencies},
-                partialViewSize: 1,
+                partialViewSize: partialViewSize,
                 delta: reloadTime,
-                timeout: 10000,
+                timeout: timeout,
                 protocol: "testsoverlaylatency",
                 signaling: {
                   address: "https://signaling.herokuapp.com/",
@@ -63,11 +97,20 @@
               }
             }
           ]
-        }))
+        }));
+        foglets[i].overlay('latency').network.descriptorTimeout = () => descriptorTimeout;
+        foglets[i].overlay('latency').network._sampleSize = (flatten) => Math.min(flatten, sampleSize);
         revertedIndex.set(foglets[i].inViewID, foglets[i].id);
         revertedName.set(foglets[i].inViewID, i);
       }
-      console.table(latencies);
+
+      for(let i = 0; i<max;++i){
+        foglets[i].overlay('latency').network.fakeRtt.latencies = latencies;
+        foglets[i].overlay('latency').network.fakeRtt.revertedName = revertedName;
+        foglets[i].overlay('latency').network.fakeRtt.compute = function (myInViewId, peerInViewId, latencies, revertedName) {
+          return latencies[revertedName.get(myInViewId)][revertedName.get(peerInViewId)];
+        };
+      }
 
       foglets.reduce((prev, cur, ind) => {
         cur.share();
@@ -92,11 +135,12 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
-        verify();
       }
 
-      setTimeout(createGraph, reloadTime);
-      setTimeout(setInterval(reloadGraph, reloadTime), reloadTime);
+      setTimeout(() => {
+        createGraph();
+        setInterval(reloadGraph, reloadTime + 2000);
+      }, reloadTime);
 
       function reloadGraph() {
         graph.destroy();
@@ -117,41 +161,35 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
-        setTimeout(verify, 1000);
+        setTimeout(verify, 2000);
       }
 
       function verify() {
-        function Result (fogId, check, totalFalse, totalTrue){
-          this.fogId = fogId;
-          this.check = check;
-          this.totalFalse = totalFalse;
-          this.totalTrue = totalTrue;
-        }
+        // choose the set of best neighbours.
+        // we have a partial view of max length 2
         let falseNb = 0, trueNb = 0;
-        let table = [];
-        foglets.forEach(fog=> {
-          let neigh = fog.overlay('latency').network.getNeighbours();
-          let check = true;
-          neigh.forEach(peer => {
-            if(revertedName.get(peer) < revertedName.get(fog.inViewID)) {
-              check = check && true;
-            } else {
-              check= check && false;
+        let convergence = 0;
+        let maxConvergence = max * partialViewSize;
+        for(let i =0; i< max; i++){
+          const neigbours = foglets[i].overlay('latency').network.getNeighbours();
+          let percentage = 0;
+          let pLatencies = [];
+          neigbours.forEach(peer => {
+            const latency = latencies[revertedName.get(foglets[i].inViewID)][revertedName.get(peer)];
+            pLatencies.push(latency);
+            if(bestlatencies[i].includes(latency)){
+              convergence++;
+              percentage++;
             }
-          })
-          if(check)
-            trueNb++;
-          else
-            falseNb++;
-          table.push(new Result(revertedName.get(fog.inViewID), check, falseNb, trueNb));
-        });
-        table.push(table);
-        console.clear()
-        console.table(table, ["fogId", "check", "totalFalse", "totalTrue"]);
-        if(falseNb === 1 && trueNb === max-1) document.getElementById('verified').innerHTML = "Verified at cycle:"+cycle;
-        const convergence = (max-falseNb)/max * 100
-        console.log('Convergence: ', (max-falseNb)/max * 100);
-        document.getElementById('verified').innerHTML = "Convergence: "+convergence+"%";
+            // console.log(`(${foglets[i].inViewID},${peer})`, ' => latency: ', latency, bestlatencies[i], bestlatencies[i].includes(latency), percentage, convergence);
+          });
+          percentage = (percentage/bestlatencies[i].length) * 100;
+          console.log('Peer: ', foglets[i].inViewID, percentage, pLatencies, bestlatencies[i]);
+        }
+        convergence = (convergence/maxConvergence) * 100;
+        console.log('Convergence: ', convergence);
+        document.getElementById('convergence').innerHTML = "Convergence: "+convergence+"%";
+        if(convergence === 100) document.getElementById('verified').innerHTML = "Convergence: "+convergence+"% at cycle: " +cycle;
       }
     </script>
   </body>

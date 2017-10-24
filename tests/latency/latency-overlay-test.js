@@ -2,7 +2,7 @@ const Foglet = require('foglet-core').Foglet
 
 describe('Latency overlay.', () => {
   it('Latency overlay should be constructed correctly', () => {
-    const Overlay = require('../../src/latency-overlay.js');
+    const Overlay = require('../../src/latency-vivaldi-overlay.js');
     let fog = new Foglet({
       overlays: [
         {

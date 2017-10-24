@@ -4,21 +4,16 @@ const vivaldi = require('vivaldi-coordinates');
 const debug = require('debug')('overlay:latency')
 const lmerge = require('lodash.merge');
 const uuid = require('uuid/v4');
+const Cache = require('./jaccard/cache.js');
 
-
-class LatencyOverlay extends TMan{
+class JaccardOverlay extends TMan{
   constructor(...args){
     super(...args);
 
     // specific options
     this.partialViewSize = this.options.partialViewSize || 5;
     this._rps._partialViewSize = () => this.partialViewSize;
-    this.fakeRtt = {
-      model: this.options.fakeRtt.model || [[]],
-      compute: (peer) => {
-        return this.fakeRtt.model[this.id][peer];
-      }
-    };
+    this.cache = new Cache(this.options.cache);
 
     // internal communications
     this.communication = new Communication(this, this.options.procotol+'-internal');
@@ -35,27 +30,7 @@ class LatencyOverlay extends TMan{
   }
 
 	_startDescriptor () {
-    this.intervalPing = setInterval(() => {
-        // console.log('Neighbours: ', this.getNeighbours(), this._rps.cache);
-        this.getNeighbours().forEach(peer => {
-          if(this._rps.cache.has(peer)) {
-            const obj = this._rps.cache.get(peer).coordinates._coordinates;
-            const remoteCoordinates = vivaldi.create(new vivaldi.HeightCoordinates(obj.x, obj.y, obj.h));
-            this._ping(peer).then((rtt) => {
-              vivaldi.update(rtt, this.descriptor.coordinates, remoteCoordinates);
-              this.communication.sendUnicast(peer, {
-                type: 'update-descriptor',
-                id: this.inviewId,
-                descriptor: this._rps.cache.get(peer)
-              });
-            }).catch(e => {
-              console.log(e);
-            });
-          }
-        });
-    }, this._descriptorTimeout());
-    let viv = vivaldi.create();
-    return { coordinates: viv };
+    return { cache: new Cache() };
   }
 
   _updateDescriptor(id, descriptor) {
@@ -72,15 +47,15 @@ class LatencyOverlay extends TMan{
   }
 
   _rankPeers (neighbours, descriptorA, descriptorB) {
+    let coordA = vivaldi.create(new vivaldi.HeightCoordinates(descriptorA.coordinates._coordinates.x, descriptorA.coordinates._coordinates.y, descriptorA.coordinates._coordinates.h));
+    let coordNeig = vivaldi.create(new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h));
+    let coordB = vivaldi.create(new vivaldi.HeightCoordinates(descriptorB.coordinates._coordinates.x, descriptorB.coordinates._coordinates.y, descriptorB.coordinates._coordinates.h));
+    const da = vivaldi.distance(coordNeig, coordA);
+    const db = vivaldi.distance(coordNeig, coordB);
     // debug('Rankpeers: me:', neighbours, neighbours.descriptor.coordinates._coordinates, descriptorA.coordinates._coordinates, descriptorB.coordinates._coordinates);
-    const da = vivaldi.distance(vivaldi.create(
-      new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h), neighbours.descriptor.coordinates),
-      new vivaldi.HeightCoordinates(descriptorA.coordinates._coordinates.x, descriptorA.coordinates._coordinates.y, descriptorA.coordinates._coordinates.h)
-    );
-    const db = vivaldi.distance(vivaldi.create(
-      new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h), neighbours.descriptor.coordinates),
-      new vivaldi.HeightCoordinates(descriptorB.coordinates._coordinates.x, descriptorB.coordinates._coordinates.y, descriptorB.coordinates._coordinates.h)
-    );
+    if(isNaN(da) && isNaN(db)) return 0;
+    if(isNaN(da)) return db;
+    if(isNaN(db)) return da;
     return da - db;
   }
 		/**
@@ -108,7 +83,7 @@ class LatencyOverlay extends TMan{
 					if(msg.id === idMessage) {
 						let time = (new Date()).getTime() - pingTime;
             if(this.fakeRtt)
-              resolve(this.fakeRtt.compute(id));
+              resolve(this.fakeRtt.compute(this.inviewId, id, this.fakeRtt.latencies, this.fakeRtt.revertedName));
             else
               resolve(time);
 					}
@@ -120,4 +95,4 @@ class LatencyOverlay extends TMan{
 	}
 }
 
-module.exports = LatencyOverlay;
+module.exports = JaccardOverlay;
