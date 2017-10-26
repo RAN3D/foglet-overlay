@@ -2,13 +2,13 @@ const TMan = require('foglet-core').abstract.tman;
 const Communication = require('foglet-core').communication;
 const vivaldi = require('vivaldi-coordinates');
 const debug = require('debug')('overlay:latency')
-
 const lmerge = require('lodash.merge');
 const isEmpty = require('lodash.isempty');
-
 const uuid = require('uuid/v4');
+const Serialize = require('serialize-javascript');
 
 const ExPeerNotFound = require('tman-wrtc/lib/exceptions/expeernotfound.js');
+const Cache = require('./cacheRtt.js');
 
 class LatencyOverlay extends TMan{
   constructor(...args){
@@ -28,6 +28,8 @@ class LatencyOverlay extends TMan{
     this.communication = new Communication(this, this.options.procotol+'-internal');
     this.communicationParent = new Communication(this.options.manager._rps.network, this.options.procotol+'-parent-internal');
     this.communication.onUnicast((id, message) => {
+      message = this.deserialize(message);
+
       // debug('tman: ', id, message);
       if(message.type && message.type === 'ping-descriptor'){
         // update coordinates of the descriptor we just received
@@ -40,16 +42,20 @@ class LatencyOverlay extends TMan{
         message.descriptor = this.descriptor;
         try {
           if(this.getNeighbours(Infinity).includes(id)){
-            this.communication.sendUnicast(id, message);
+            this.communication.sendUnicast(id, this.serialize(message));
           }
         } catch (e) {
           console.log('pong tman:', e);
         }
       } else if (message.type && message.type === 'pong-descriptor') {
         this.emit('pong-descriptor-'+message.id, message);
+      } else if (message.type && message.type === 'update-descriptor' && message.id && message.descriptor) {
+        this._updatePositionFromRemoteCoordinates(message.id, message.descriptor);
       }
     });
     this.communicationParent.onUnicast((id, message) => {
+      message = this.deserialize(message);
+
       if(message.type && message.type === 'ping-descriptor'){
         // update coordinates of the descriptor we just received
         let desc = this._rps.cache.has(message.owner) && this._rps.cache.get(message.owner);
@@ -62,13 +68,15 @@ class LatencyOverlay extends TMan{
         message.descriptor = this.descriptor;
         try {
           if(this.options.manager._rps.network.getNeighbours(Infinity).includes(id)){
-            this.communicationParent.sendUnicast(id, message);
+            this.communicationParent.sendUnicast(id, this.serialize(message));
           }
         } catch (e) {
           console.log('pong parent:', e);
         }
       } else if (message.type && message.type === 'pong-descriptor') {
         this.emit('pong-descriptor-'+message.id, message);
+      } else if (message.type && message.type === 'update-descriptor' && message.id && message.descriptor) {
+        this._updatePositionFromRemoteCoordinates(message.id, message.descriptor);
       }
     });
 
@@ -82,20 +90,15 @@ class LatencyOverlay extends TMan{
         while (val = mapIter.next().value) {
           elems.push(val);
         }
-        console.log(elem);
-        let sortByAges = elem.slice().sort((a, b) => (a.ages - b.ages));
-        console.log(sortByAges);
-        let sortByRtt = sortByAges.slice().sort((a, b) => (a.descriptor.rtt - b.descriptor.rtt));
-        console.log(sortByRtt);
-        let oldestPeer = null;
-        let oldestRtt = 0;
-        this.forEach( (epv, peerId) => {
-           if (oldestRtt <= epv.descriptor.rtt) {
-               oldestPeer = epv.peer;
-               oldestRtt = epv.descriptor.rtt;
-           };
-        });
-        return oldestPeer;
+        console.log(elems);
+        let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
+        // console.log('SortByAges;', sortByAges);
+        let sortByRtt = sortByAges.slice().sort((a, b) => ( a.descriptor.latencies.cache[a.peer] - b.descriptor.latencies.cache[b.peer]));
+        // console.log('SortByRtt;', sortByRtt);
+        const oldest = sortByRtt[sortByRtt.length-1].peer
+        // const oldest = sortByAges[sortByAges.length-1].peer
+        console.log('Oldest:', oldest);
+        return oldest;
       }
     });
 
@@ -137,6 +140,21 @@ class LatencyOverlay extends TMan{
     // });
   }
 
+  serialize(message) {
+    return Serialize(message, {isJSON: true});
+  }
+
+  deserialize(message) {
+    return eval('(' + message + ')');
+  } 
+
+  _updatePositionFromRemoteCoordinates(id, descriptor) {
+    this.descriptor.latencies.updateFrom(descriptor.latencies.cache);
+    // this.descriptor.latencies.set(id, descriptor.latencies.cache[this.inviewId]);
+    const rtt = this.descriptor.latencies.get(this.inviewId);
+    if(rtt) this._updateOurDescriptor(id, descriptor, rtt);
+  }
+
 	_startDescriptor () {
     this.intervalPing = setInterval(() => {
         // console.log('Neighbours: ', this.getNeighbours(), this._rps.cache);
@@ -145,6 +163,8 @@ class LatencyOverlay extends TMan{
         neigh.forEach(peer => {
           this._pingUpdate(peer).then(() => {
             // console.log('Updated our position from tman neighbours');
+            // send our descriptor to all neighbours for update
+            this.sendLocalDescriptor();
           }).catch(e => {
             console.log(e);
           });
@@ -152,20 +172,44 @@ class LatencyOverlay extends TMan{
         parentNeigh.forEach(peer => {
           this._pingUpdateParent(peer).then(() => {
             // console.log('Updated our position from parent neighbours');
+            // send our descriptor to all parent neighbours for update
+            this.sendLocalDescriptorParent();
           }).catch(e => {
             console.log(e);
           });
         });
     }, this.options.pingDelta);
     let viv = vivaldi.create();
-    return { coordinates: viv, rtt: 0 };
+    return { coordinates: viv, latencies: new Cache(this.options.timeout) };
+  }
+
+  sendLocalDescriptor () {
+    let desc = this.descriptor;
+    this.getNeighbours().forEach(peer => {
+      this.communication.sendUnicast(peer, this.serialize({
+        id: this.inviewId,
+        type: 'update-descriptor',
+        descriptor: desc
+      }));
+    });
+  }
+
+  sendLocalDescriptorParent () {
+    let desc = this.descriptor;
+    this.options.manager._rps.network.getNeighbours().forEach(peer => {
+      this.communicationParent.sendUnicast(peer, this.serialize({
+        id: this.inviewId,
+        type: 'update-descriptor',
+        descriptor: desc
+      }));
+    });
   }
 
   _pingUpdate(peer) {
     return new Promise((resolve, reject) => {
       // compute the ping and get the remote descriptor
       this._ping(peer).then((result) => {
-        result.descriptor.rtt = result.rtt;
+        this.descriptor.latencies.set(peer, result.rtt);
         // update the descriptor in the cache and the partial view if inside
         this._updateDescriptor(peer, result.descriptor);
         this._updateOurDescriptor(peer, result.descriptor, result.rtt);
@@ -181,7 +225,7 @@ class LatencyOverlay extends TMan{
     return new Promise((resolve, reject) => {
       // compute the ping and get the remote descriptor
       this._pingParent(peer).then((result) => {
-        result.descriptor.rtt = result.rtt;
+        this.descriptor.latencies.set(peer, result.rtt);
         // update the descriptor in the cache and the partial view if inside
         this._updateDescriptor(peer, result.descriptor);
         this._updateOurDescriptor(peer, result.descriptor, result.rtt);
@@ -201,18 +245,18 @@ class LatencyOverlay extends TMan{
 	_ping (id) {
 		return new Promise((resolve, reject) => {
 			try {
-        let index = this.getNeighbours().indexOf(id);
+        let index = this.getNeighbours(Infinity).indexOf(id);
 				if(index < 0) reject('id not in our list of neighbours');
 				const idMessage = uuid();
 				let pingTime = (new Date()).getTime();
 				// send a ping request
 				try {
-          this.communication.sendUnicast(id, {
+          this.communication.sendUnicast(id, this.serialize({
             id: idMessage,
             type: 'ping-descriptor',
             owner: this.inviewId,
             coordinates: this.descriptor.coordinates
-          })
+          }));
 				} catch (e) {
 				  reject('ping'+e.stack);
 				}
@@ -241,18 +285,18 @@ class LatencyOverlay extends TMan{
 	_pingParent (id) {
 		return new Promise((resolve, reject) => {
 			try {
-				let index = this.options.manager._rps.network.getNeighbours().indexOf(id);
+				let index = this.options.manager._rps.network.getNeighbours(Infinity).indexOf(id);
 				if(index < 0) reject('id not in our list of neighbours');
 				const idMessage = uuid();
 				let pingTime = (new Date()).getTime();
 				// send a ping request
 				try {
-          this.communication.sendUnicast(id, {
+          this.communication.sendUnicast(id, this.serialize({
             id: idMessage,
             type: 'ping-descriptor',
             owner: this.inviewId,
             coordinates: this.descriptor.coordinates
-          })
+          }));
 				} catch (e) {
 				  reject('ping'+e.stack);
 				}
