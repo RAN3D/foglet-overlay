@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "foglet-core": "git+https://github.com/ran3d/foglet-core.git",
+    "lodash.isempty": "^4.4.0",
     "lodash.merge": "^4.6.0",
     "uuid": "^3.1.0",
     "vivaldi-coordinates": "^1.0.0"

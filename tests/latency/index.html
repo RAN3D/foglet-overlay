@@ -5,6 +5,7 @@
     <title>latency exemple</title>
     <script src='../../dist/overlay.bundle.js'></script>
     <script src='../../node_modules/p2p-graph/p2p-graph.min.js'></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
       .graph {
         width: 100%;
@@ -18,17 +19,19 @@
     <div id='verified'></div>
     <div id='convergence'></div>
     <div id='graph'></div>
+
+    <div id='plot'></div>
     <script>
       console.log(overlay)
       localStorage.debug = 'overlay*';
       // params
       const max = 10;
-      const reloadTime =10 * 1000;
+      const reloadTime = 10 * 1000;
       const descriptorTimeout = 30 * 1000;
-      const intervalPing = 15 * 1000;
+      const intervalPing = 5 * 1000;
       const partialViewSize = 5;
-      const sampleSize = 4;
-      const timeout = 20 * 1000;
+      const sampleSize = 5;
+      const timeout = 2 * 60 * 1000;
 
       // variables
       let cycle = 0;
@@ -40,7 +43,7 @@
       let bestlatencies = [];
 
       // create fake latencies
-      const CONSTANT = 100;
+      const CONSTANT = 10;
       for(let i = 0; i<max;++i){
         let temp_latencies = [];
         for(let j=0;j<max;j++) {
@@ -139,6 +142,17 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
+
+
+        var trace1 = {
+          x: xarray,
+          y: yarray,
+          type: 'markers'
+        };
+
+        var data = [trace1, trace2];
+
+        Plotly.newPlot('myDiv', data);
       }
 
       setTimeout(() => {
