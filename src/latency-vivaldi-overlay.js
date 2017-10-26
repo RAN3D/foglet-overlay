@@ -72,21 +72,32 @@ class LatencyOverlay extends TMan{
       }
     });
 
-    // delete this._rps.partialView.oldest;
-    // Object.defineProperty(this._rps.partialView, "oldest", {
-    //   get: function () {
-    //     if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
-    //     let oldestPeer = null;
-    //     let oldestRtt = 0;
-    //     this.forEach( (epv, peerId) => {
-    //        if (oldestRtt <= epv.descriptor.rtt) {
-    //            oldestPeer = epv.peer;
-    //            oldestRtt = epv.descriptor.rtt;
-    //        };
-    //     });
-    //     return oldestPeer;
-    //   }
-    // });
+    delete this._rps.partialView.oldest;
+    Object.defineProperty(this._rps.partialView, "oldest", {
+      get: function () {
+        if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
+        let elems = [];
+        let mapIter = this.values();
+        let val;
+        while (val = mapIter.next().value) {
+          elems.push(val);
+        }
+        console.log(elem);
+        let sortByAges = elem.slice().sort((a, b) => (a.ages - b.ages));
+        console.log(sortByAges);
+        let sortByRtt = sortByAges.slice().sort((a, b) => (a.descriptor.rtt - b.descriptor.rtt));
+        console.log(sortByRtt);
+        let oldestPeer = null;
+        let oldestRtt = 0;
+        this.forEach( (epv, peerId) => {
+           if (oldestRtt <= epv.descriptor.rtt) {
+               oldestPeer = epv.peer;
+               oldestRtt = epv.descriptor.rtt;
+           };
+        });
+        return oldestPeer;
+      }
+    });
 
     // delete this._rps._getSample();
     // Object.defineProperty(this._rps, "_getSample", {

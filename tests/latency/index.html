@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>latency exemple</title>
+    <title>Latency Overlay graph</title>
     <script src='../../dist/overlay.bundle.js'></script>
     <script src='../../node_modules/p2p-graph/p2p-graph.min.js'></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -237,8 +237,11 @@
           trace1.y.push(coordinates.y);
         });
         var data = [trace1];
-
-        Plotly.newPlot('plot', data);
+        var layout = {
+          title: 'Vivaldi Coordinates',
+          showlegend: false
+        };
+        Plotly.newPlot('plot', data, layout);
       }
     </script>
   </body>
