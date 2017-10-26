@@ -210,6 +210,7 @@ class LatencyOverlay extends TMan{
       const obj = descriptor.coordinates._coordinates;
       const remoteCoordinates = vivaldi.create(new vivaldi.HeightCoordinates(obj.x, obj.y, obj.h));
       res = vivaldi.update(rtt, this.descriptor.coordinates, remoteCoordinates);
+      this._rps.options.descriptor = this.descriptor;
       // debug('descriptor after:', this.descriptor.coordinates._coordinates, this._rps.options.descriptor.coordinates._coordinates);  
     } catch (error) {
       console.log(error);
