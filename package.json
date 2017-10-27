@@ -5,7 +5,8 @@
   "main": "foglet-overlay.js",
   "scripts": {
     "build": "foglet-scripts build",
-    "test": "foglet-scripts test"
+    "test": "foglet-scripts test",
+    "start": "foglet-scripts start"
   },
   "repository": {
     "type": "git",

@@ -86,6 +86,23 @@
 
       for(let i = 0; i<max;++i){
         foglets.push(new overlay.foglet.Foglet({
+          rps: {
+            type: 'spray-wrtc',
+            options: {
+              protocol: 'foglet-example-rps', // foglet running on the protocol foglet-example, defined for spray-wrtc
+              webrtc:	{ // add WebRTC options
+                trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
+                iceServers : [] // define iceServers in non local instance
+              },
+              timeout: 2 * 60 * 1000, // spray-wrtc timeout before definitively close a WebRTC connection.
+              delta: reloadTime,   // spray-wrtc shuffle interval
+              signaling: {
+                address: 'http://localhost:3000/',
+                // signalingAdress: 'https://signaling.herokuapp.com/', // address of the signaling server
+                room: 'best-room-for-foglet-rps' // room to join
+              }
+            }
+          },
           overlays: [
             {
               name: 'latency',
@@ -97,7 +114,7 @@
                 timeout: timeout,
                 protocol: "testsoverlaylatency",
                 signaling: {
-                  address: "https://signaling.herokuapp.com/",
+                  address: "http://localhost:3000",
                   room: "stests"
                 }
               }
