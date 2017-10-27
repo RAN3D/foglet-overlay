@@ -80,27 +80,26 @@ class LatencyOverlay extends TMan{
       }
     });
 
-    delete this._rps.partialView.oldest;
-    Object.defineProperty(this._rps.partialView, "oldest", {
-      get: function () {
-        if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
-        let elems = [];
-        let mapIter = this.values();
-        let val;
-        while (val = mapIter.next().value) {
-          elems.push(val);
-        }
-        console.log(elems);
-        let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
-        // console.log('SortByAges;', sortByAges);
-        let sortByRtt = sortByAges.slice().sort((a, b) => ( a.descriptor.latencies.cache[a.peer] - b.descriptor.latencies.cache[b.peer]));
-        // console.log('SortByRtt;', sortByRtt);
-        const oldest = sortByRtt[sortByRtt.length-1].peer
-        // const oldest = sortByAges[sortByAges.length-1].peer
-        console.log('Oldest:', oldest);
-        return oldest;
-      }
-    });
+    // delete this._rps.partialView.oldest;
+    // Object.defineProperty(this._rps.partialView, "oldest", {
+    //   get: function () {
+    //     if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
+    //     let elems = [];
+    //     let mapIter = this.values();
+    //     let val;
+    //     while (val = mapIter.next().value) {
+    //       elems.push(val);
+    //     }
+    //     let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
+    //     // console.log('SortByAges;', sortByAges);
+    //     let sortByRtt = sortByAges.slice().sort((a, b) => ( a.descriptor.latencies.cache[a.peer] - b.descriptor.latencies.cache[b.peer]));
+    //     console.log('SortByRtt;', sortByRtt);
+    //     const oldest = sortByRtt[sortByRtt.length-1].peer
+    //     // const oldest = sortByAges[sortByAges.length-1].peer
+    //     console.log('Oldest:', oldest);
+    //     return oldest;
+    //   }
+    // });
 
     // delete this._rps._getSample();
     // Object.defineProperty(this._rps, "_getSample", {
@@ -146,10 +145,10 @@ class LatencyOverlay extends TMan{
 
   deserialize(message) {
     return eval('(' + message + ')');
-  } 
+  }
 
   _updatePositionFromRemoteCoordinates(id, descriptor) {
-    this.descriptor.latencies.updateFrom(descriptor.latencies.cache);
+    this.descriptor.latencies.set(id, descriptor.latencies.cache[this.inviewId]);
     // this.descriptor.latencies.set(id, descriptor.latencies.cache[this.inviewId]);
     const rtt = this.descriptor.latencies.get(this.inviewId);
     if(rtt) this._updateOurDescriptor(id, descriptor, rtt);
@@ -363,14 +362,14 @@ class LatencyOverlay extends TMan{
       const m3 = Math.pow((b.h - a.h), 2);
       return Math.sqrt(m1+m2+m3);
     }
-    // debug(this.inviewId, coordNeig, coordA, coordB);
-    //const da = distance(new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h), new vivaldi.HeightCoordinates(descriptorA.coordinates._coordinates.x, descriptorA.coordinates._coordinates.y, descriptorA.coordinates._coordinates.h));
-    //const db = distance(new vivaldi.HeightCoordinates(neighbours.descriptor.coordinates._coordinates.x, neighbours.descriptor.coordinates._coordinates.y, neighbours.descriptor.coordinates._coordinates.h), new vivaldi.HeightCoordinates(descriptorB.coordinates._coordinates.x, descriptorB.coordinates._coordinates.y, descriptorB.coordinates._coordinates.h));
+    // debug(neighbours.peer, descriptorA, descriptorB);
     const da = vivaldi.distance(createHeighFromDescriptor(neighbours.descriptor), createHeighFromDescriptor(descriptorA));
     const db = vivaldi.distance(createHeighFromDescriptor(neighbours.descriptor), createHeighFromDescriptor(descriptorB));
+    // const da = descriptorA.latencies.cache[neighbours.peer];
+    // const db = descriptorB.latencies.cache[neighbours.peer]
+    // debug(da, db);
 
-    // debug(da, db, da < db);
-    // debug('Rankpeers: me:', neighbours, neighbours.descriptor.coordinates._coordinates, descriptorA.coordinates._coordinates, descriptorB.coordinates._coordinates);
+
     if(isNaN(da) && isNaN(db)) return Infinity;
     if(isNaN(da)) return 1;
     if(isNaN(db)) return -1;

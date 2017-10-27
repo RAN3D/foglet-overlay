@@ -21,19 +21,24 @@
     <div id='graph'></div>
 
     <div id='plot'></div>
+    <div id='convergencePlot'></div>
     <script>
       console.log(overlay)
       localStorage.debug = 'overlay*';
       // params
       const max = 10;
-      const reloadTime = 5 * 1000;
-      const descriptorTimeout = 30 * 1000;
+      const reloadTime = 10 * 1000;
+      const descriptorTimeout = 10 * 1000;
       const intervalPing = 5 * 1000;
       const partialViewSize = 5;
       const sampleSize = 5;
       const timeout = 2 * 60 * 1000;
 
       // variables
+      let globalConvergence = {
+        x: [],
+        y: []
+      }
       let cycle = 0;
       let foglets = [];
       let graph = undefined;
@@ -161,7 +166,7 @@
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
 
 
-        
+
       }
 
       setTimeout(() => {
@@ -239,6 +244,8 @@
         }
         document.getElementById('convergence').innerHTML = stringConvergence;
         if(convergence === 100) document.getElementById('verified').innerHTML = "Convergence: "+convergence+"% at cycle: " +cycle;
+        globalConvergence.x.push(cycle);
+        globalConvergence.y.push(convergence);
       }
 
       function createPlot() {
@@ -259,6 +266,16 @@
           showlegend: false
         };
         Plotly.newPlot('plot', data, layout);
+
+        var trace2 = {
+          x: globalConvergence.x,
+          y: globalConvergence.y,
+          mode: 'lines',
+          type: 'scatter'
+        };
+        Plotly.newPlot('convergencePlot', [ trace2 ], {
+          title:'Convergence by cycle'
+        });
       }
     </script>
   </body>
