@@ -8,6 +8,7 @@ const uuid = require('uuid/v4');
 const Serialize = require('serialize-javascript');
 
 const ExPeerNotFound = require('tman-wrtc/lib/exceptions/expeernotfound.js');
+const MRequire = require('tman-wrtc/lib/messages/mrequire.js');
 const Cache = require('./cacheRtt.js');
 
 class LatencyOverlay extends TMan{
@@ -85,28 +86,69 @@ class LatencyOverlay extends TMan{
       }
     });
 
-    // delete this.rps.partialView.oldest;
-    // Object.defineProperty(this.rps.partialView, "oldest", {
-    //   get: function () {
-    //     if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
-    //     let elems = [];
-    //     let mapIter = this.values();
-    //     let val;
-    //     while (val = mapIter.next().value) {
-    //       elems.push(val);
-    //     }
-    //     let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
-    //     // console.log('SortByAges;', sortByAges);
-    //     let sortByRtt = sortByAges.slice().sort((a, b) => ( a.descriptor.latencies.cache[a.peer] - b.descriptor.latencies.cache[b.peer]));
-    //     console.log('SortByRtt;', sortByRtt);
-    //     const oldest = sortByRtt[sortByRtt.length-1].peer
-    //     // const oldest = sortByAges[sortByAges.length-1].peer
-    //     console.log('Oldest:', oldest);
-    //     return oldest;
-    //   }
-    // });
+    // access to our descriptor in the oldest function
+    this.rps.partialView.descriptor = this.descriptor;
+    this.rps.partialView.ranking = this.rps.options.ranking;
+    delete this.rps.partialView.oldest;
+    Object.defineProperty(this.rps.partialView, "oldest", {
+      get: function () {
+        if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
+        let elems = [];
+        let mapIter = this.values();
+        let val;
+        while (val = mapIter.next().value) {
+          elems.push(val);
+        }
+        let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
+        // console.log('SortByAges;', sortByAges);
+        let sortByRtt = sortByAges.slice().sort( this.ranking({descriptor: this.descriptor}) );
+        console.log('SortByRtt;', sortByRtt);
+        const oldest = sortByRtt[sortByRtt.length-1].peer
+        // const oldest = sortByAges[sortByAges.length-1].peer
+        console.log('Oldest:', oldest);
+        return oldest;
+      }
+    });
 
     this.descriptor.peer = this.inviewId;
+    
+    Object.defineProperty(this.rps, "_onExchangeBack", {
+      value: function (peerId, message) {
+        // #1 keep the best elements from the received sample
+        let ranked = [];
+        this.partialView.forEach( (epv, neighbor) => ranked.push(epv));
+        message.sample.forEach( (e) => ranked.indexOf(e) < 0 && ranked.push(e) );
+        
+        ranked.sort( this.options.ranking(this.options) );
+        console.log(ranked);
+        // #2 require the elements
+        let sliced = ranked.slice(0, this._partialViewSize());
+        let request = [];
+        sliced.forEach( (e) => {
+            if (!this.partialView.has(e.peer)) {
+                request.push(e.peer);
+                this.cache.add(e.peer, e.descriptor);
+            }
+        });
+        if (request.length > 0) {
+            debug('[%s] %s wants to keep %s peers.',
+                  this.PID, this.PEER, request.length);
+            this.send(peerId, new MRequire(request), this.options.retry)
+                .catch( (e) => {
+                    debug('[%s] %s =X> request descriptors %s =X> %s',
+                          this.PID, this.PEER, request.length, peerId);
+                });
+        }
+        
+        let rest = ranked.slice(this._partialViewSize(), ranked.length);
+        if (rest.length > 0 && this.partialView.size > this._partialViewSize()){
+            rest.forEach( (p) => {
+                this.partialView.has(p.peer) && this.disconnect(p.peer);
+            });
+        }
+        
+      }
+    })
 
     // delete this.rps._getSample();
     // Object.defineProperty(this._rps, "_getSample", {
