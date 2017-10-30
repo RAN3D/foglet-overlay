@@ -48,7 +48,8 @@
       let bestlatencies = [];
 
       // create fake latencies
-      const CONSTANT = 10;
+      const CONSTANT = 50;
+      const CONTSANT_MULT = 50;
       for(let i = 0; i<max;++i){
         let temp_latencies = [];
         for(let j=0;j<max;j++) {
@@ -61,8 +62,8 @@
           if( i === j) {
             latencies[i][j] = 0;
           } else {
-            latencies[i][j] = i+j + CONSTANT;
-            latencies[j][i] = i+j + CONSTANT;
+            latencies[i][j] = (i+j)*CONTSANT_MULT + CONSTANT;
+            latencies[j][i] = (i+j)*CONTSANT_MULT + CONSTANT;
           }
         }
       }
@@ -252,13 +253,17 @@
         var trace1 = {
           x: [],
           y: [],
-          mode: 'markers',
-          type: 'scatter'
+          mode: 'markers+text',
+          textposition: 'bottom',
+          type: 'scatter',
+          text: []
         };
         foglets.forEach(p => {
-          const coordinates = p.overlay('latency').network.descriptor.coordinates._coordinates;
+          // const coordinates = p.overlay('latency').network.descriptor.coordinates._coordinates;
+          const coordinates = p.overlay('latency').network.coordinates._coordinates;
           trace1.x.push(coordinates.x);
           trace1.y.push(coordinates.y);
+          trace1.text.push(`Node: ${revertedName.get(p.overlay('latency').network.inviewId)}`);
         });
         var data = [trace1];
         var layout = {
@@ -276,6 +281,26 @@
         Plotly.newPlot('convergencePlot', [ trace2 ], {
           title:'Convergence by cycle'
         });
+      }
+
+      function distance() {
+        let res = []
+        let revert = [];
+        foglets.forEach(f => {
+          let res2 = [], revert2 = [];
+          // calcul the distance between f and all profile coordiantes
+          const network = f.overlay('latency').network;
+          let desc = network.descriptor;
+          network._rps.partialView.forEach((v, k ) => {
+            console.log(v, k);
+            res2.push(network._vivaldiDistance(desc, v.descriptor));
+            revert2.push(revertedName.get(k));
+          })
+          res.push(res2);
+          revert.push(revert2);
+        });
+        console.table(res);
+        console.table(revert);
       }
     </script>
   </body>

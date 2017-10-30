@@ -11,11 +11,16 @@ const ExPeerNotFound = require('tman-wrtc/lib/exceptions/expeernotfound.js');
 const Cache = require('./cacheRtt.js');
 
 class LatencyOverlay extends TMan{
-  constructor(...args){
-    super(...args);
+  constructor(manager, options){
+    let opt = lmerge({
+      vivaldi: {
+        error: 50
+      }
+    }, options);
+    super(manager, opt);
     // specific options
     this.partialViewSize = this.options.partialViewSize || 5;
-    this._rps._partialViewSize = () => this.partialViewSize;
+    this.rps._partialViewSize = () => this.partialViewSize;
     this.options.pingDelta = this.options.pingDelta || 10 * 1000;
     this.options.timeoutDescriptor = this.options.timeoutDescriptor || 30 * 1000;
     this.fakeRtt = this.options.fakeRtt || {
@@ -33,7 +38,7 @@ class LatencyOverlay extends TMan{
       // debug('tman: ', id, message);
       if(message.type && message.type === 'ping-descriptor'){
         // update coordinates of the descriptor we just received
-        let desc = this._rps.cache.has(message.owner) && this._rps.cache.get(message.owner);
+        let desc = this.rps.cache.has(message.owner) && this.rps.cache.get(message.owner);
         if(desc){
           desc.coordinates = message.coordinates;
           this._updateDescriptor(message.owner, desc);
@@ -58,7 +63,7 @@ class LatencyOverlay extends TMan{
 
       if(message.type && message.type === 'ping-descriptor'){
         // update coordinates of the descriptor we just received
-        let desc = this._rps.cache.has(message.owner) && this._rps.cache.get(message.owner);
+        let desc = this.rps.cache.has(message.owner) && this.rps.cache.get(message.owner);
         if(desc){
           desc.coordinates = message.coordinates;
           this._updateDescriptor(message.owner, desc);
@@ -80,8 +85,8 @@ class LatencyOverlay extends TMan{
       }
     });
 
-    // delete this._rps.partialView.oldest;
-    // Object.defineProperty(this._rps.partialView, "oldest", {
+    // delete this.rps.partialView.oldest;
+    // Object.defineProperty(this.rps.partialView, "oldest", {
     //   get: function () {
     //     if (this.size <= 0) { throw new ExPeerNotFound('getOldest'); };
     //     let elems = [];
@@ -101,7 +106,9 @@ class LatencyOverlay extends TMan{
     //   }
     // });
 
-    // delete this._rps._getSample();
+    this.descriptor.peer = this.inviewId;
+
+    // delete this.rps._getSample();
     // Object.defineProperty(this._rps, "_getSample", {
     //   value: function (neighbor) {
     //     // #1 create a flatten version of the partial view
@@ -156,30 +163,35 @@ class LatencyOverlay extends TMan{
 
 	_startDescriptor () {
     this.intervalPing = setInterval(() => {
-        // console.log('Neighbours: ', this.getNeighbours(), this._rps.cache);
+        // console.log('Neighbours: ', this.getNeighbours(), this.rps.cache);
         let neigh = this.getNeighbours();
         let parentNeigh = this.options.manager._rps.network.getNeighbours();
         neigh.forEach(peer => {
-          this._pingUpdate(peer).then(() => {
-            // console.log('Updated our position from tman neighbours');
-            // send our descriptor to all neighbours for update
-            this.sendLocalDescriptor();
-          }).catch(e => {
-            console.log(e);
-          });
+          //f(!this.descriptor.latencies.get(peer)) {
+            this._pingUpdate(peer).then(() => {
+              // console.log('Updated our position from tman neighbours');
+              // send our descriptor to all neighbours for update
+              this.sendLocalDescriptor();
+            }).catch(e => {
+              console.log(e);
+            });
+          //}
         });
         parentNeigh.forEach(peer => {
-          this._pingUpdateParent(peer).then(() => {
-            // console.log('Updated our position from parent neighbours');
-            // send our descriptor to all parent neighbours for update
-            this.sendLocalDescriptorParent();
-          }).catch(e => {
-            console.log(e);
-          });
+          //if(!this.descriptor.latencies.get(peer)) {
+            this._pingUpdateParent(peer).then(() => {
+              // console.log('Updated our position from parent neighbours');
+              // send our descriptor to all parent neighbours for update
+              this.sendLocalDescriptorParent();
+            }).catch(e => {
+              console.log(e);
+            });
+          //}
         });
     }, this.options.pingDelta);
-    let viv = vivaldi.create();
-    return { coordinates: viv, latencies: new Cache(this.options.timeout) };
+    let viv = vivaldi.create(this.options.vivaldi.error);
+    this.coordinates = viv;
+    return { coordinates: viv.toFloatArray(), latencies: new Cache(this.options.timeout) };
   }
 
   sendLocalDescriptor () {
@@ -323,25 +335,37 @@ class LatencyOverlay extends TMan{
    * @return {void}
    */
   _updateDescriptor(id, descriptor, rtt) {
-    if(!this._rps.cache.has(id)){
-      this._rps.cache.add(id, descriptor);
+    if(!this.rps.cache.has(id)){
+      this.rps.cache.add(id, descriptor);
     } else {
-      this._rps.cache.set(id, descriptor);
+      this.rps.cache.set(id, descriptor);
     }
     if(this.rps.partialView.has(id)){
-      this._rps.partialView.updateNeighbor(id, descriptor);
+      this.rps.partialView.updateNeighbor(id, descriptor);
     }
+  }
+
+  _updateCoordinates(){
+    const cache = this.rps.cache;
+    cache.forEach(c => {
+      let correspondigRtt = this.descriptor.latencies.get(c.peer);
+      if(correspondigRtt){
+        vivaldi.update(correspondigRtt, this.coordinates, this._createHeighFromDescriptor(c));
+      }
+    })
+    this.descriptor.coordinates = this.coordinates.toFloatArray();
   }
 
   _updateOurDescriptor(id, descriptor, rtt) {
     let res = false;
     try {
-      // debug('descriptor before:', this.descriptor.coordinates._coordinates, this._rps.options.descriptor.coordinates._coordinates);
-      const obj = descriptor.coordinates._coordinates;
-      const remoteCoordinates = vivaldi.create(new vivaldi.HeightCoordinates(obj.x, obj.y, obj.h));
-      res = vivaldi.update(rtt, this.descriptor.coordinates, remoteCoordinates);
-      this._rps.options.descriptor = this.descriptor;
-      // debug('descriptor after:', this.descriptor.coordinates._coordinates, this._rps.options.descriptor.coordinates._coordinates);
+      // update our position from the new rtt
+      const remoteCoordinates = this._createHeighFromDescriptor(descriptor);
+      res = vivaldi.update(rtt, this.coordinates, remoteCoordinates);
+      // re compute on all previous coordinates
+      this._updateCoordinates();
+      this.rps.options.descriptor = this.descriptor;
+
     } catch (error) {
       console.log(error);
     }
@@ -352,25 +376,28 @@ class LatencyOverlay extends TMan{
     return this.options.timeoutDescriptor;
   }
 
+  _createHeighFromDescriptor (desc) {
+    //
+    return vivaldi.VivaldiPosition.fromFloatArray(desc.coordinates);
+    // return new vivaldi.VivaldiPosition(new vivaldi.HeightCoordinates(desc.coordinates._coordinates.x, desc.coordinates._coordinates.y, desc.coordinates._coordinates.h ));
+  }
+
+  _vivaldiDistance (desc1, desc2) {
+    return vivaldi.distance(this._createHeighFromDescriptor(desc1), this._createHeighFromDescriptor(desc2));
+  }
+
+  _euclideanDistance (descA, descB) {
+    let a = descA.coordinates._coordinates, b = descB.coordinates._coordinates;
+    const m1 = Math.pow((b.x - a.x), 2);
+    const m2 = Math.pow((b.y - a.y), 2);
+    const m3 = Math.pow((b.h - a.h), 2);
+    return Math.sqrt(m1+m2+m3);
+  }
+
   _rankPeers (neighbours, descriptorA, descriptorB) {
-    function createHeighFromDescriptor (desc) {
-      return new vivaldi.VivaldiPosition(new vivaldi.HeightCoordinates(desc.coordinates._coordinates.x, desc.coordinates._coordinates.y, desc.coordinates._coordinates.h ));
-    }
-    function distance(a, b) {
-      const m1 = Math.pow((b.x - a.x), 2);
-      const m2 = Math.pow((b.y - a.y), 2);
-      const m3 = Math.pow((b.h - a.h), 2);
-      return Math.sqrt(m1+m2+m3);
-    }
-    // debug(neighbours.peer, descriptorA, descriptorB);
-    const da = vivaldi.distance(createHeighFromDescriptor(neighbours.descriptor), createHeighFromDescriptor(descriptorA));
-    const db = vivaldi.distance(createHeighFromDescriptor(neighbours.descriptor), createHeighFromDescriptor(descriptorB));
-    // const da = descriptorA.latencies.cache[neighbours.peer];
-    // const db = descriptorB.latencies.cache[neighbours.peer]
-    // debug(da, db);
-
-
-    if(isNaN(da) && isNaN(db)) return Infinity;
+    const da = this._vivaldiDistance(neighbours.descriptor, descriptorA);
+    const db = this._vivaldiDistance(neighbours.descriptor, descriptorB);
+    if(isNaN(da) && isNaN(db)) return -1;
     if(isNaN(da)) return 1;
     if(isNaN(db)) return -1;
     return da - db;
