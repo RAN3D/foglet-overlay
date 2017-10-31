@@ -46,6 +46,7 @@ class LatencyOverlay extends TMan{
         }
         message.type = 'pong-descriptor';
         message.descriptor = this.descriptor;
+        message.owner = this.inviewId;
         try {
           if(this.getNeighbours(Infinity).includes(id)){
             this.communication.sendUnicast(id, this.serialize(message));
@@ -54,9 +55,10 @@ class LatencyOverlay extends TMan{
           console.log('pong tman:', e);
         }
       } else if (message.type && message.type === 'pong-descriptor') {
+        this._updateDescriptor(message.owner, message.descriptor);
         this.emit('pong-descriptor-'+message.id, message);
       } else if (message.type && message.type === 'update-descriptor' && message.id && message.descriptor) {
-        this._updatePositionFromRemoteCoordinates(message.id, message.descriptor);
+        this._updateOurDescriptor(message.id, message.descriptor, message.rtt);
       }
     });
     this.communicationParent.onUnicast((id, message) => {
@@ -72,6 +74,7 @@ class LatencyOverlay extends TMan{
 
         message.type = 'pong-descriptor';
         message.descriptor = this.descriptor;
+        message.owner = this.inviewId;
         try {
           if(this.options.manager._rps.network.getNeighbours(Infinity).includes(id)){
             this.communicationParent.sendUnicast(id, this.serialize(message));
@@ -80,9 +83,10 @@ class LatencyOverlay extends TMan{
           console.log('pong parent:', e);
         }
       } else if (message.type && message.type === 'pong-descriptor') {
+        this._updateDescriptor(message.owner, message.descriptor);
         this.emit('pong-descriptor-'+message.id, message);
       } else if (message.type && message.type === 'update-descriptor' && message.id && message.descriptor) {
-        this._updatePositionFromRemoteCoordinates(message.id, message.descriptor);
+        this._updateOurDescriptor(message.id, message.descriptor, message.rtt);
       }
     });
 
@@ -99,54 +103,63 @@ class LatencyOverlay extends TMan{
         while (val = mapIter.next().value) {
           elems.push(val);
         }
-        let sortByAges = elems.slice().sort((a, b) => (a.ages - b.ages));
+
         // console.log('SortByAges;', sortByAges);
-        let sortByRtt = sortByAges.slice().sort( this.ranking({descriptor: this.descriptor}) );
+        let sortByRtt = elems.slice().sort( this.ranking({descriptor: this.descriptor}) );
         console.log('SortByRtt;', sortByRtt);
-        const oldest = sortByRtt[sortByRtt.length-1].peer
-        // const oldest = sortByAges[sortByAges.length-1].peer
+        let sortByAges = sortByRtt.slice().sort((a, b) => (a.ages - b.ages));
+
+        //const oldest = sortByRtt[sortByRtt.length-1].peer
+        const oldest = sortByAges[sortByAges.length-1].peer
         console.log('Oldest:', oldest);
         return oldest;
       }
     });
 
     this.descriptor.peer = this.inviewId;
-    
+
+    delete this.rps._onExchangeBack;
     Object.defineProperty(this.rps, "_onExchangeBack", {
       value: function (peerId, message) {
         // #1 keep the best elements from the received sample
         let ranked = [];
         this.partialView.forEach( (epv, neighbor) => ranked.push(epv));
         message.sample.forEach( (e) => ranked.indexOf(e) < 0 && ranked.push(e) );
-        
+        this.parent.partialView.forEach((array, peer) => {
+          if(ranked.indexOf(peer) < 0 && this.cache.has(peer)) {
+            const p = { peer, descriptor: this.cache.get(peer)};
+            ranked.push(p);
+            debug('[%s] %s =X> Add a parent neighbour in the list: ', this.PID, this.PEER, p);
+          }
+        });
+
         ranked.sort( this.options.ranking(this.options) );
-        console.log(ranked);
         // #2 require the elements
-        let sliced = ranked.slice(0, this._partialViewSize());
         let request = [];
-        sliced.forEach( (e) => {
+        ranked.forEach( (e) => {
             if (!this.partialView.has(e.peer)) {
                 request.push(e.peer);
                 this.cache.add(e.peer, e.descriptor);
             }
         });
+        request = request.slice(0, this._partialViewSize());
+
         if (request.length > 0) {
-            debug('[%s] %s wants to keep %s peers.',
-                  this.PID, this.PEER, request.length);
+            // debug('[%s] %s wants to keep %s peers. ',
+            //       this.PID, this.PEER, request.length );
             this.send(peerId, new MRequire(request), this.options.retry)
                 .catch( (e) => {
-                    debug('[%s] %s =X> request descriptors %s =X> %s',
-                          this.PID, this.PEER, request.length, peerId);
+                    // debug('[%s] %s =X> request descriptors %s =X> %s',
+                    //       this.PID, this.PEER, request.length, peerId);
                 });
         }
-        
+
         let rest = ranked.slice(this._partialViewSize(), ranked.length);
         if (rest.length > 0 && this.partialView.size > this._partialViewSize()){
             rest.forEach( (p) => {
                 this.partialView.has(p.peer) && this.disconnect(p.peer);
             });
         }
-        
       }
     })
 
@@ -196,13 +209,6 @@ class LatencyOverlay extends TMan{
     return eval('(' + message + ')');
   }
 
-  _updatePositionFromRemoteCoordinates(id, descriptor) {
-    this.descriptor.latencies.set(id, descriptor.latencies.cache[this.inviewId]);
-    // this.descriptor.latencies.set(id, descriptor.latencies.cache[this.inviewId]);
-    const rtt = this.descriptor.latencies.get(this.inviewId);
-    if(rtt) this._updateOurDescriptor(id, descriptor, rtt);
-  }
-
 	_startDescriptor () {
     this.intervalPing = setInterval(() => {
         // console.log('Neighbours: ', this.getNeighbours(), this.rps.cache);
@@ -210,10 +216,15 @@ class LatencyOverlay extends TMan{
         let parentNeigh = this.options.manager._rps.network.getNeighbours();
         neigh.forEach(peer => {
           //f(!this.descriptor.latencies.get(peer)) {
-            this._pingUpdate(peer).then(() => {
+            this._pingUpdate(peer).then((result) => {
               // console.log('Updated our position from tman neighbours');
               // send our descriptor to all neighbours for update
-              this.sendLocalDescriptor();
+              this.communication.sendUnicast(peer, this.serialize({
+                id: this.inviewId,
+                type: 'update-descriptor',
+                descriptor: this.descriptor,
+                rtt: result.rtt
+              }));
             }).catch(e => {
               console.log(e);
             });
@@ -221,10 +232,15 @@ class LatencyOverlay extends TMan{
         });
         parentNeigh.forEach(peer => {
           //if(!this.descriptor.latencies.get(peer)) {
-            this._pingUpdateParent(peer).then(() => {
+            this._pingUpdateParent(peer).then((result) => {
               // console.log('Updated our position from parent neighbours');
               // send our descriptor to all parent neighbours for update
-              this.sendLocalDescriptorParent();
+              this.communicationParent.sendUnicast(peer, this.serialize({
+                id: this.inviewId,
+                type: 'update-descriptor',
+                descriptor: this.descriptor,
+                rtt: result.rtt
+              }));
             }).catch(e => {
               console.log(e);
             });
@@ -236,27 +252,27 @@ class LatencyOverlay extends TMan{
     return { coordinates: viv.toFloatArray(), latencies: new Cache(this.options.timeout) };
   }
 
-  sendLocalDescriptor () {
-    let desc = this.descriptor;
-    this.getNeighbours().forEach(peer => {
-      this.communication.sendUnicast(peer, this.serialize({
-        id: this.inviewId,
-        type: 'update-descriptor',
-        descriptor: desc
-      }));
-    });
-  }
-
-  sendLocalDescriptorParent () {
-    let desc = this.descriptor;
-    this.options.manager._rps.network.getNeighbours().forEach(peer => {
-      this.communicationParent.sendUnicast(peer, this.serialize({
-        id: this.inviewId,
-        type: 'update-descriptor',
-        descriptor: desc
-      }));
-    });
-  }
+  // sendLocalDescriptor () {
+  //   let desc = this.descriptor;
+  //   this.getNeighbours().forEach(peer => {
+  //     this.communication.sendUnicast(peer, this.serialize({
+  //       id: this.inviewId,
+  //       type: 'update-descriptor',
+  //       descriptor: desc,
+  //     }));
+  //   });
+  // }
+  //
+  // sendLocalDescriptorParent () {
+  //   let desc = this.descriptor;
+  //   this.options.manager._rps.network.getNeighbours().forEach(peer => {
+  //     this.communicationParent.sendUnicast(peer, this.serialize({
+  //       id: this.inviewId,
+  //       type: 'update-descriptor',
+  //       descriptor: desc
+  //     }));
+  //   });
+  // }
 
   _pingUpdate(peer) {
     return new Promise((resolve, reject) => {
@@ -266,7 +282,7 @@ class LatencyOverlay extends TMan{
         // update the descriptor in the cache and the partial view if inside
         this._updateDescriptor(peer, result.descriptor);
         this._updateOurDescriptor(peer, result.descriptor, result.rtt);
-        resolve();
+        resolve(result);
       }).catch(e => {
         console.log('ping: ', e);
         reject(e); //reject(e);
@@ -282,7 +298,7 @@ class LatencyOverlay extends TMan{
         // update the descriptor in the cache and the partial view if inside
         this._updateDescriptor(peer, result.descriptor);
         this._updateOurDescriptor(peer, result.descriptor, result.rtt);
-        resolve();
+        resolve(result);
       }).catch(e => {
         console.log('ping: ', e);
         reject(e); //reject(e);
@@ -376,7 +392,7 @@ class LatencyOverlay extends TMan{
    * @param  {object} descriptor Descriptor of the peer identified by its id
    * @return {void}
    */
-  _updateDescriptor(id, descriptor, rtt) {
+  _updateDescriptor(id, descriptor) {
     if(!this.rps.cache.has(id)){
       this.rps.cache.add(id, descriptor);
     } else {
