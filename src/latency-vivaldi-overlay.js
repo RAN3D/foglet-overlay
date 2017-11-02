@@ -16,20 +16,21 @@ class LatencyOverlay extends TMan{
     let opt = lmerge({
       vivaldi: {
         error: 50
+      },
+      partialViewSize: 5,
+      pingDelta: 10 * 1000,
+      timeoutDescriptor: 30 * 1000,
+      fakeRtt: {
+        latencies: [[]],
+        revertedName: new Map(),
+        compute: (myInViewId, peerInViewId, latencies, revertedName) => Math.random() * 10 + 100
       }
     }, options);
     super(manager, opt);
     // specific options
-    this.partialViewSize = this.options.partialViewSize || 5;
-    this.rps._partialViewSize = () => this.partialViewSize;
-    this.options.pingDelta = this.options.pingDelta || 10 * 1000;
-    this.options.timeoutDescriptor = this.options.timeoutDescriptor || 30 * 1000;
-    this.fakeRtt = this.options.fakeRtt || {
-      latencies: [[]],
-      revertedName: new Map(),
-      compute: (myInViewId, peerInViewId, latencies, revertedName) => Math.random() * 10 + 100
-    };
-
+    debug(this.options);
+    this.rps._partialViewSize = () => this.options.partialViewSize;
+    this.fakeRtt = this.options.fakeRtt;
     // internal communications
     this.communication = new Communication(this, this.options.procotol+'-internal');
     this.communicationParent = new Communication(this.options.manager._rps.network, this.options.procotol+'-parent-internal');
@@ -106,12 +107,10 @@ class LatencyOverlay extends TMan{
 
         // console.log('SortByAges;', sortByAges);
         let sortByRtt = elems.slice().sort( this.ranking({descriptor: this.descriptor}) );
-        console.log('SortByRtt;', sortByRtt);
         let sortByAges = sortByRtt.slice().sort((a, b) => (a.ages - b.ages));
 
         //const oldest = sortByRtt[sortByRtt.length-1].peer
         const oldest = sortByAges[sortByAges.length-1].peer
-        console.log('Oldest:', oldest);
         return oldest;
       }
     });
@@ -129,7 +128,7 @@ class LatencyOverlay extends TMan{
           if(ranked.indexOf(peer) < 0 && this.cache.has(peer)) {
             const p = { peer, descriptor: this.cache.get(peer)};
             ranked.push(p);
-            debug('[%s] %s =X> Add a parent neighbour in the list: ', this.PID, this.PEER, p);
+            // debug('[%s] %s =X> Add a parent neighbour in the list: ', this.PID, this.PEER, p);
           }
         });
 
@@ -161,44 +160,7 @@ class LatencyOverlay extends TMan{
             });
         }
       }
-    })
-
-    // delete this.rps._getSample();
-    // Object.defineProperty(this._rps, "_getSample", {
-    //   value: function (neighbor) {
-    //     // #1 create a flatten version of the partial view
-    //     let flatten = [];
-    //     // #A extract the partial view of tman
-    //     this.partialView.forEach( (epv, peerId) => {
-    //         epv.ages.forEach( (age) => {
-    //             !isEmpty(epv.descriptor) && flatten.push(peerId);
-    //         });
-    //     });
-    //     // #B add random peers from parent
-    //     this.parent && this.parent.partialView.forEach( (ages, peerId) => {
-    //         if (this.cache.has(peerId) && flatten.indexOf(peerId) < 0) {
-    //             flatten.push(peerId);
-    //         };
-    //     });
-    //     // #2 replace all peerId occurrences by ours
-    //     flatten = flatten.map( (peerId) => {
-    //         let d = {descriptor: this.options.descriptor};
-    //         if (peerId === neighbor.peer){
-    //             d.peer = this.getInviewId();
-    //         } else {
-    //             d.descriptor = (this.cache.has(peerId)&&this.cache.get(peerId))
-    //                 || this.partialView.getDescriptor(peerId);
-    //             d.peer = peerId;
-    //         };
-    //         return d;
-    //     });
-    //     // #3 process the size of the sample
-    //     const sampleSize = this._sampleSize(flatten);
-    //     // #4 rank according to PeerId
-    //     flatten.sort( this.options.ranking(neighbor) );
-    //     return flatten.slice(0, sampleSize);
-    //   }
-    // });
+    });
   }
 
   serialize(message) {

@@ -30,7 +30,7 @@
       const reloadTime = 10 * 1000;
       const descriptorTimeout = 10 * 1000;
       const intervalPing = 5 * 1000;
-      const partialViewSize = 5;
+      const partialViewSize = 4;
       const sampleSize = 7;
       const timeout = 2 * 60 * 1000;
 
@@ -116,6 +116,10 @@
               options: {
                 vivaldi: {
                   error: 50
+                },
+                webrtc:	{ // add WebRTC options
+                  trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
+                  iceServers : [] // define iceServers in non local instance
                 },
                 partialViewSize: partialViewSize,
                 delta: reloadTime,
