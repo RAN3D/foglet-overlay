@@ -26,11 +26,11 @@
       console.log(overlay)
       localStorage.debug = 'overlay*';
       // params
-      const max = 10;
+      let max = 10;
       const reloadTime = 10 * 1000;
       const descriptorTimeout = 10 * 1000;
       const intervalPing = 5 * 1000;
-      const partialViewSize = 4;
+      const partialViewSize = 3;
       const sampleSize = 7;
       const timeout = 2 * 60 * 1000;
 
@@ -46,94 +46,57 @@
       let revertedName = new Map();
       let latencies = [];
       let bestlatencies = [];
-
-      // create fake latencies
-      const CONSTANT = 50;
-      const CONTSANT_MULT = 50;
-      for(let i = 0; i<max;++i){
-        let temp_latencies = [];
-        for(let j=0;j<max;j++) {
-          temp_latencies.push(j);
+      setInterval(() => {
+        cycle++;
+      }, reloadTime);
+      function computeLatencyMatrix(){
+        latencies = [];
+        bestlatencies = [];
+        // create fake latencies
+        const CONSTANT = 50;
+        const CONTSANT_MULT = 50;
+        for(let i = 0; i<max;++i){
+          let temp_latencies = [];
+          for(let j=0;j<max;j++) {
+            temp_latencies.push(j);
+          }
+          latencies.push(temp_latencies);
         }
-        latencies.push(temp_latencies);
-      }
-      for(let i = 0; i<max;++i){
-        for(let j=0;j<max;j++) {
-          if( i === j) {
-            latencies[i][j] = 0;
-          } else {
-            latencies[i][j] = (i+j)*CONTSANT_MULT + CONSTANT;
-            latencies[j][i] = (i+j)*CONTSANT_MULT + CONSTANT;
+        for(let i = 0; i<max;++i){
+          for(let j=0;j<max;j++) {
+            if( i === j) {
+              latencies[i][j] = 0;
+            } else {
+              latencies[i][j] = (i+j)*CONTSANT_MULT + CONSTANT;
+              latencies[j][i] = (i+j)*CONTSANT_MULT + CONSTANT;
+            }
           }
         }
-      }
-      console.log('Fake latencies for our overlays: ');
-      console.table(latencies);
-
-      // create the best latencies for each Clients
-
-      for(let i = 0; i<max;++i){
-        let sort = latencies[i].slice().sort((a, b) => {
-          if(a < b) return 1;
-          if(a === b) return 0;
-          return -1;
-        });
-        let clone = sort.slice().filter(x => x !== 0);
-        // console.log(sort);
-        let best = [];
-        for(let j = 0; j < partialViewSize; j++){
-          best.push(clone.pop());
+        console.log('Fake latencies for our overlays: ');
+        console.table(latencies);
+        // create the best latencies for each Clients
+        for(let i = 0; i<max;++i){
+          let sort = latencies[i].slice().sort((a, b) => {
+            if(a < b) return 1;
+            if(a === b) return 0;
+            return -1;
+          });
+          let clone = sort.slice().filter(x => x !== 0);
+          // console.log(sort);
+          let best = [];
+          for(let j = 0; j < partialViewSize; j++){
+            best.push(clone.pop());
+          }
+          // console.log(best);
+          bestlatencies.push(best);
         }
-        // console.log(best);
-        bestlatencies.push(best);
+        console.log('Best latencies to reach: ');
+        console.table(bestlatencies);
       }
-      console.log('Best latencies to reach: ');
-      console.table(bestlatencies);
 
+      computeLatencyMatrix();
       for(let i = 0; i<max;++i){
-        foglets.push(new overlay.foglet.Foglet({
-          rps: {
-            type: 'spray-wrtc',
-            options: {
-              protocol: 'foglet-example-rps', // foglet running on the protocol foglet-example, defined for spray-wrtc
-              webrtc:	{ // add WebRTC options
-                trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
-                iceServers : [] // define iceServers in non local instance
-              },
-              timeout: 2 * 60 * 1000, // spray-wrtc timeout before definitively close a WebRTC connection.
-              delta: reloadTime,   // spray-wrtc shuffle interval
-              signaling: {
-                address: 'http://localhost:3000/',
-                // signalingAdress: 'https://signaling.herokuapp.com/', // address of the signaling server
-                room: 'best-room-for-foglet-rps' // room to join
-              }
-            }
-          },
-          overlays: [
-            {
-              name: 'latency',
-              class: overlay.latencyVivaldiOverlay,
-              options: {
-                vivaldi: {
-                  error: 50
-                },
-                webrtc:	{ // add WebRTC options
-                  trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
-                  iceServers : [] // define iceServers in non local instance
-                },
-                partialViewSize: partialViewSize,
-                delta: reloadTime,
-                pingDelta: intervalPing,
-                timeout: timeout,
-                protocol: "testsoverlaylatency",
-                signaling: {
-                  address: "http://localhost:3000",
-                  room: "stests"
-                }
-              }
-            }
-          ]
-        }));
+        foglets.push(createFoglet());
         foglets[i].overlay('latency').network._rps._sampleSize = (flatten) => {
           return Math.min(flatten.length, sampleSize);
         }
@@ -172,17 +135,14 @@
         }
         cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
-
-
-
       }
 
       setTimeout(() => {
         createGraph();
         verify();
         createPlot();
-        setInterval(reloadGraph, reloadTime + 2000);
-      }, reloadTime);
+        setInterval(reloadGraph, 5000);
+      }, 2000);
 
       function reloadGraph() {
         graph.destroy();
@@ -201,7 +161,6 @@
               graph.connect(foglets[i].id, revertedIndex.get(peer));
           });
         }
-        cycle++;
         document.getElementById('cycle').innerHTML = 'Cycle: '+cycle;
         setTimeout(() => {
           verify();
@@ -300,7 +259,7 @@
           let desc = network.descriptor;
           network._rps.partialView.forEach((v, k ) => {
             console.log(v, k);
-            res2.push(network._vivaldiDistance(desc, v.descriptor));
+            res2.push(Math.round(network._vivaldiDistance(desc, v.descriptor)));
             revert2.push(revertedName.get(k));
           })
           res.push(res2);
@@ -308,6 +267,72 @@
         });
         console.table(res);
         console.table(revert);
+      }
+
+      function addNeighbor() {
+        foglets.push(createFoglet());
+        max++;
+        foglets[max-1].overlay('latency').network._rps._sampleSize = (flatten) => {
+          return Math.min(flatten.length, sampleSize);
+        }
+        revertedIndex.set(foglets[max-1].inViewID, foglets[max-1].id);
+        revertedName.set(foglets[max-1].inViewID, max-1);
+        computeLatencyMatrix();
+        for(let i = 0; i<max;++i){
+          foglets[i].overlay('latency').network.fakeRtt.latencies = latencies;
+          foglets[i].overlay('latency').network.fakeRtt.revertedName = revertedName;
+          foglets[i].overlay('latency').network.fakeRtt.compute = function (myInViewId, peerInViewId, latencies, revertedName) {
+            return latencies[revertedName.get(myInViewId)][revertedName.get(peerInViewId)];
+          };
+        }
+        foglets[max-1].share();
+        foglets[max-1].connection();
+      }
+
+      function createFoglet(){
+        return new overlay.foglet.Foglet({
+          rps: {
+            type: 'spray-wrtc',
+            options: {
+              protocol: 'foglet-example-rps', // foglet running on the protocol foglet-example, defined for spray-wrtc
+              webrtc:	{ // add WebRTC options
+                trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
+                iceServers : [] // define iceServers in non local instance
+              },
+              timeout: 2 * 60 * 1000, // spray-wrtc timeout before definitively close a WebRTC connection.
+              delta: 15 * 1000,   // spray-wrtc shuffle interval
+              signaling: {
+                address: 'http://localhost:3000/',
+                // signalingAdress: 'https://signaling.herokuapp.com/', // address of the signaling server
+                room: 'best-room-for-foglet-rps' // room to join
+              }
+            }
+          },
+          overlays: [
+            {
+              name: 'latency',
+              class: overlay.latencyVivaldiOverlay,
+              options: {
+                vivaldi: {
+                  error: 1
+                },
+                webrtc:	{ // add WebRTC options
+                  trickle: true, // enable trickle (divide offers in multiple small offers sent by pieces)
+                  iceServers : [] // define iceServers in non local instance
+                },
+                partialViewSize: partialViewSize,
+                delta: reloadTime,
+                pingDelta: intervalPing,
+                timeout: timeout,
+                protocol: "testsoverlaylatency",
+                signaling: {
+                  address: "http://localhost:3000",
+                  room: "stests"
+                }
+              }
+            }
+          ]
+        });
       }
     </script>
   </body>
