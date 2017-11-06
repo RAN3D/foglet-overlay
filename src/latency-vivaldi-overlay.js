@@ -227,38 +227,56 @@ class LatencyOverlay extends TMan{
     Object.defineProperty(this.rps, '_keep', {
       value: function (peerId){
         if(peerId !== this.inviewId){
-          if (this.partialView.size === 0 || !this.partialView.has(peerId)) {
-            this.partialView.addNeighbor(peerId, this.cache.get(peerId));
-          };
-
-          let promiseAll = [];
-          this.partialView.forEach(p => {
-            console.log(p.peer);
-            promiseAll.push(p.peer);
-          })
           let ranked = [];
           this.partialView.forEach( (epv, neighbor) => ranked.push(epv));
-          promiseAll = promiseAll.map(id => this.parentFoglet._pingUpdate(id));
-          Promise.all(promiseAll).then((result) => {
-            ranked.sort( (a, b) => {
-              let rttA = this.latencies.get(a.peer), rttB = this.latencies.get(b.peer);
-              console.log(rttA, rttB);
-              // let rttA = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(a.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
-              // let rttB = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(b.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
-              // console.log(a, b, rttA, rttB, this.inviewId, this.fakeLatencies.revertedName.get(a.peer), this.fakeLatencies.revertedName.get(b.peer), this.fakeLatencies);
-              return rttA - rttB
-              // return rttA - rttB;
-            });
-            debug('[Keep]: after ping update', result, ranked);
-            // ranked.sort(this.options.ranking(this.options));
-            let sliced = ranked.slice(0, this._partialViewSize());
-            ranked.splice(0, this._partialViewSize());
-            // console.log(sliced, ranked, save, this.latencies);
-            ranked.forEach( (neighbor) => this.disconnect(neighbor.peer) );
-          }).catch(e => {
-            debug('[%s] Error: ', this.inviewId, e);
+          ranked.push({peer: peerId, descriptor: this.cache.get(peerId) });
+          ranked.sort( (a, b) => {
+            let rttA = this.latencies.get(a.peer), rttB = this.latencies.get(b.peer);
+            console.log(rttA, rttB);
+            // let rttA = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(a.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
+            // let rttB = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(b.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
+            // console.log(a, b, rttA, rttB, this.inviewId, this.fakeLatencies.revertedName.get(a.peer), this.fakeLatencies.revertedName.get(b.peer), this.fakeLatencies);
+            return rttA - rttB
+            // return rttA - rttB;
           });
+          let sliced = ranked.slice(0, this._partialViewSize());
+          ranked.splice(0, this._partialViewSize());
+          // ranked becomes the rest: the lowest graded
+          if (ranked.length === 0 || ranked.indexOf(peerId) < 0) {
+              this.partialView.addNeighbor(peerId, this.cache.get(peerId));
+          };
+          ranked.forEach( (neighbor) => this.disconnect(neighbor.peer) );
         }
+      }
+    });
+
+    delete this.rps._requestDescriptor;
+    Object.defineProperty(this.rps, '_requestDescriptor', {
+      value: function (peerId) {
+        return new Promise( (resolve, reject) => {
+            let to = null;
+            const beginTime = (new Date()).getTime();
+            this.send(peerId, new MRequestDescriptor(), this.options.retry).then( () => {
+              to = setTimeout( () => {
+                this.removeAllListeners(this.PID + '-' + peerId);
+                reject('timeout'); // (TODO) throw exception
+              }, this.options.descriptorTimeout);
+            }).catch( (e) => {
+                reject(e);
+            });
+
+            this.once(this.PID + '-' + peerId, (message) => {
+              const endTime = (new Date()).getTime();
+              clearTimeout(to);
+              let rtt = endTime - beginTime;
+              if(this.fakeLatencies) {
+                rtt = this.fakeLatencies.compute(this.inviewId, peerId, this.fakeLatencies.latencies, this.fakeLatencies.revertedName);
+              }
+              this.latencies.set(peerId, rtt);
+              this.cache.add(message.peer, message.descriptor);
+              resolve();
+            });
+        });
       }
     })
 
