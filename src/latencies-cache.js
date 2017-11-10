@@ -2,8 +2,10 @@
 /**
  * Cache that will store rtt;
  */
-module.exports = class Cache{
+module.exports = class Cache extends Map{
+
   constructor(timeout){
+    super()
     this.cache = {};
     this.timeout = timeout;
     this.timeoutCache = {};
