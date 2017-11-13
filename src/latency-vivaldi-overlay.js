@@ -12,7 +12,25 @@ const MRequire = require('tman-wrtc/lib/messages/mrequire.js');
 const MSuggest = require('tman-wrtc/lib/messages/msuggest.js');
 const Cache = require('./latencies-cache.js');
 
+/**
+ * This class is an Implementation of a T-Man Overlay based on Latency using Vivaldi as NCS.
+ * We just improve it by adjusting/, affining our ranking according to real RTT on the last step of T-Man rank (see _keep method)
+ */
 class LatencyOverlay extends TMan{
+  /**
+   * Construcotr
+   * @param  {NetworkManager} manager foglet-core Network Manager
+   * @param  {Object} options Options
+   * @param  {Number} [options.vivaldi.error=50] Vivaldi default error
+   * @param  {Number} [options.partialViewSize=5] Max Size of the partial view
+   * @param  {Number} [options.pingDelta=10000] Time between each ping round (RTT recalculation)
+   * @param  {Number} [options.timeoutDescriptor=30000] Time before it is timeout when we are asking
+   * @param  {Number[][]} options.fakeRtt Enabling a way to test our Implementation by fixing all latencies
+   * @param  {Number[][]} options.fakeRtt.latencies Mirror matrix of latencies
+   * @param  {Map} options.fakeRtt.revertedName Map of reverted name, each hosts
+   * @param  {function} options.fakeRtt.compute Function that return the latency between myInViewId and peerInViewId in latencies and in revertedName
+   * @return {[type]}         [description]
+   */
   constructor(manager, options){
     let opt = lmerge({
       vivaldi: {
@@ -67,9 +85,6 @@ class LatencyOverlay extends TMan{
         message = this.deserialize(message);
 
         if(message.type && message.type === 'ping-descriptor'){
-          // update coordinates of the descriptor we just received
-          // this._updateDescriptor(message.owner, message.descriptor);
-
           message.type = 'pong-descriptor';
           message.descriptor = this.descriptor;
           message.owner = this.inviewId;
@@ -116,108 +131,6 @@ class LatencyOverlay extends TMan{
 
     this.descriptor.peer = this.inviewId;
 
-    // delete this.rps._onExchangeBack;
-    // Object.defineProperty(this.rps, "_onExchangeBack", {
-    //   value: function (peerId, message) {
-    //     // #1 keep the best elements from the received sample
-    //     let ranked = [];
-    //     this.partialView.forEach( (epv, neighbor) => ranked.push(epv));
-    //     message.sample.forEach( (e) => ranked.indexOf(e) < 0 && ranked.push(e) );
-    //     if(this.parent){
-    //       this.parent.partialView.forEach((array, peer) => {
-    //         if(ranked.indexOf(peer) < 0 && this.cache.has(peer)) {
-    //           const p = { peer, descriptor: this.cache.get(peer)};
-    //           ranked.push(p);
-    //           // debug('[%s] %s =X> Add a parent neighbour in the list: ', this.PID, this.PEER, p);
-    //         }
-    //       });
-    //     }
-    //
-    //     ranked.sort( this.options.ranking(this.options) );
-    //     // #2 require the elements
-    //     let request = [];
-    //     ranked.forEach( (e) => {
-    //         if (!this.partialView.has(e.peer)) {
-    //             request.push(e.peer);
-    //             this.cache.add(e.peer, e.descriptor);
-    //         }
-    //     });
-    //     request = request.slice(0, this._partialViewSize());
-    //
-    //     if (request.length > 0) {
-    //         // debug('[%s] %s wants to keep %s peers. ',
-    //         //       this.PID, this.PEER, request.length );
-    //         this.send(peerId, new MRequire(request), this.options.retry)
-    //             .catch( (e) => {
-    //                 // debug('[%s] %s =X> request descriptors %s =X> %s',
-    //                 //       this.PID, this.PEER, request.length, peerId);
-    //             });
-    //     }
-    //
-    //     let rest = ranked.slice(this._partialViewSize(), ranked.length);
-    //     if (rest.length > 0 && this.partialView.size > this._partialViewSize()){
-    //         rest.forEach( (p) => {
-    //             this.partialView.has(p.peer) && this.disconnect(p.peer);
-    //         });
-    //     }
-    //   }
-    // });
-
-    // delete this.rps._exchange;
-    // Object.defineProperty(this.rps, '_exchange', {
-    //   value: function () {
-    //     // #0 if the partial view is empty --- could be due to disconnections,
-    //     // failure, or _onExchange started with other peers --- skip this round.
-    //     if (this.partialView.size <= 0 &&
-    //         this.parent && this.parent.partialView.size <= 0) {
-    //         return;
-    //     }
-    //     this.partialView.increment();
-    //     // #1 get the oldest peer in our partial view. If the partial view is
-    //     // empty, fall back to parent's partial view.
-    //     let chosen, chosen_array = [];
-    //     let sample, sample_array = [];
-    //     let fromOurOwn = true;
-    //     if (this.partialView.size > 0) {
-    //         // #A use our own partial view
-    //         // chosen = this.partialView.oldest;
-    //         // sample = this._getSample(this.partialView.get(chosen));
-    //         this.partialView.forEach( (v,k) => chosen_array.push(k));
-    //         sample_array = chosen_array.map((peer) => this._getSample(this.partialView.get(peer)));
-    //     } else if (this.parent && this.parent.partialView.size > 0) {
-    //         // #B use the partial view of our parent
-    //         let rnNeighbors = this.parent.getPeers();
-    //         let found = false;
-    //         fromOurOwn = false;
-    //         while (!found && rnNeighbors.length > 0){
-    //             const rn = Math.floor(Math.random() * rnNeighbors.length);
-    //             if (this.cache.has(rnNeighbors[rn])){
-    //                 found = true;
-    //                 chosen_array.push(rnNeighbors[rn]);
-    //                 sample_array.push(this._getSample({peer: chosen_array[0],
-    //                                           descriptor: this.cache.get(chosen_array[0])
-    //                                         }));
-    //             } else {
-    //                 rnNeighbors.splice(rn, 1);
-    //             };
-    //         };
-    //     };
-    //     // #2 propose the sample to the chosen one
-    //     debug('[%s] want to send sample: ', this.PEER, chosen_array, sample_array);
-    //     for(let i = 0; i < chosen_array.length; ++i){
-    //       chosen_array[i] !== this.getInviewId()
-    //         && this.send(chosen_array[i],new MSuggest(this.getInviewId(), this.options.descriptor, sample_array[i])).then( () => {
-    //         // #A it seems the message has been sent correctly
-    //         //debug('[%s] %s ==> suggest %s ==> %s', this.PID, this.PEER, sample_array[i].length, chosen_array[i]);
-    //       }).catch( (e) => {
-    //          // #B the peer cannot be reached, he is supposedly dead
-    //          //debug('[%s] %s =X> suggest =X> %s',   this.PID, this.PEER, chosen_array[i]);
-    //          fromOurOwn && this._onPeerDown(chosen_array[i]);
-    //       });
-    //     }
-    //   }
-    // });
-
     delete this.rps._keep;
     this.rps.latencies = this.latencies;
     this.rps.fakeLatencies = this.fakeRtt;
@@ -233,11 +146,7 @@ class LatencyOverlay extends TMan{
           ranked.sort( (a, b) => {
             let rttA = this.latencies.get(a.peer), rttB = this.latencies.get(b.peer);
             console.log(rttA, rttB);
-            // let rttA = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(a.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
-            // let rttB = this.fakeLatencies.latencies[this.fakeLatencies.revertedName.get(b.peer)][this.fakeLatencies.revertedName.get(this.inviewId)];
-            // console.log(a, b, rttA, rttB, this.inviewId, this.fakeLatencies.revertedName.get(a.peer), this.fakeLatencies.revertedName.get(b.peer), this.fakeLatencies);
             return rttA - rttB
-            // return rttA - rttB;
           });
           let sliced = ranked.slice(0, this._partialViewSize());
           ranked.splice(0, this._partialViewSize());
@@ -279,37 +188,24 @@ class LatencyOverlay extends TMan{
         });
       }
     })
-
-    this.rps.on('open', (peerId) => {
-        debug('New connection: ', peerId);
-    });
   }
 
-  serialize(message) {
-    return Serialize(message, {isJSON: true});
-  }
-
-  deserialize(message) {
-    return eval('(' + message + ')');
-  }
-
+  /**
+   * Create the descriptor at first step
+   * @return {[type]} [description]
+   */
 	_startDescriptor () {
     this.intervalPing = setInterval(() => {
-        // console.log('Neighbours: ', this.getNeighbours(), this.rps.cache);
         let neigh = this.getNeighbours();
         neigh.forEach(peer => {
           if(!neigh.includes(this.inviewId)){
             this._pingUpdate(peer).then((result) => {
-              // console.log('Updated our position from tman neighbours');
-              // send our descriptor to all neighbours for update
-              // debug('[%s] new rtt tman from [%s]: ', this.inviewId, peer, result);
               this.communication.sendUnicast(peer, this.serialize({
                 id: this.inviewId,
                 type: 'update-descriptor',
                 descriptor: this.descriptor,
                 rtt: result.rtt
               }));
-              // send our local descriptor updated to all neighbors except for the previous one already sent
               this._sendLocalDescriptor(peer);
             }).catch(e => {
               console.log(e);
@@ -322,8 +218,6 @@ class LatencyOverlay extends TMan{
           parentNeigh.forEach(peer => {
             if(!neigh.includes(peer)&& !neigh.includes(this.inviewId) && !parentNeigh.includes(this.inviewId)) {
               this._pingUpdateParent(peer).then((result) => {
-                // debug('[%s] new rtt parent from [%s]: ', this.inviewId, peer, result);
-                // console.log('Updated our position from parent neighbours');
                 // send our descriptor to all parent neighbours for update
                 this.communicationParent.sendUnicast(peer, this.serialize({
                   id: this.inviewId,
@@ -387,6 +281,11 @@ class LatencyOverlay extends TMan{
     });
   }
 
+  /**
+   * Update the RTT between us and specified peer, update information in the cache and update our descriptor
+   * @param  {[type]} peer PeerId
+   * @return {Promise}
+   */
   _pingUpdate(peer) {
     return new Promise((resolve, reject) => {
       // compute the ping and get the remote descriptor
@@ -402,6 +301,11 @@ class LatencyOverlay extends TMan{
     });
   }
 
+  /**
+   * Update the Parent RTT between us and specified Parent peer, update information in the cache and update our descriptor
+   * @param  {[type]} peer PeerId
+   * @return {Promise}
+   */
   _pingUpdateParent(peer) {
     return new Promise((resolve, reject) => {
       // compute the ping and get the remote descriptor
@@ -514,6 +418,10 @@ class LatencyOverlay extends TMan{
     }
   }
 
+  /**
+   * Update our coordinates according to all coordinates we have in our cache.
+   * @return {[type]} [description]
+   */
   _updateCoordinates(){
     const cache = this.rps.cache;
     cache.forEach(c => {
@@ -526,6 +434,13 @@ class LatencyOverlay extends TMan{
     this.descriptor.coordinates = this.coordinates.toFloatArray();
   }
 
+  /**
+   * Update our Descriptor by updating our position
+   * @param  {[type]} id         Remote peer id
+   * @param  {[type]} descriptor Remote descriptor
+   * @param  {[type]} rtt        Rtt between us and Peer id
+   * @return {boolean} Return true or false, Vivaldi update state.
+   */
   _updateOurDescriptor(id, descriptor, rtt) {
     this.latencies.set(id, rtt);
     let res = false;
@@ -544,28 +459,40 @@ class LatencyOverlay extends TMan{
     return res;
   }
 
+  /**
+   * Getter: the Descriptor Timeout
+   * @return {[type]} [description]
+   */
   _descriptorTimeout () {
     return this.options.timeoutDescriptor;
   }
 
+  /**
+   * Create Position from a Descriptor
+   * @param  {Object} desc Descriptor
+   * @return {VivaldiPosition}
+   */
   _createHeighFromDescriptor (desc) {
-    //
     return vivaldi.VivaldiPosition.fromFloatArray(desc.coordinates);
-    // return new vivaldi.VivaldiPosition(new vivaldi.HeightCoordinates(desc.coordinates._coordinates.x, desc.coordinates._coordinates.y, desc.coordinates._coordinates.h ));
   }
 
+  /**
+   * Return the distance between 2 descriptors
+   * @param  {[type]} desc1 [description]
+   * @param  {[type]} desc2 [description]
+   * @return {[type]}       [description]
+   */
   _vivaldiDistance (desc1, desc2) {
     return vivaldi.distance(this._createHeighFromDescriptor(desc1), this._createHeighFromDescriptor(desc2));
   }
 
-  _euclideanDistance (descA, descB) {
-    let a = descA.coordinates._coordinates, b = descB.coordinates._coordinates;
-    const m1 = Math.pow((b.x - a.x), 2);
-    const m2 = Math.pow((b.y - a.y), 2);
-    const m3 = Math.pow((b.h - a.h), 2);
-    return Math.sqrt(m1+m2+m3);
-  }
-
+  /**
+   * Ranking method applied on descriptor A and B for the descriptor Neighbours
+   * @param  {[type]} neighbours  Descriptor on which we based our ranking
+   * @param  {[type]} descriptorA Ranking descriptor A
+   * @param  {[type]} descriptorB Ranking Descriptor B
+   * @return {[type]} Rank elements according to their descriptor,  we keep DescriptorA if < 0, Descriptor B if > 0, none if === 0
+   */
   _rankPeers (neighbours, descriptorA, descriptorB) {
     const da = Math.round(this._vivaldiDistance(neighbours.descriptor, descriptorA));
     const db = Math.round(this._vivaldiDistance(neighbours.descriptor, descriptorB));
