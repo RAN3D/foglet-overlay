@@ -25,7 +25,7 @@ class LatencyOverlay extends TMan{
    * @param  {Number} [options.partialViewSize=5] Max Size of the partial view
    * @param  {Number} [options.pingDelta=10000] Time between each ping round (RTT recalculation)
    * @param  {Number} [options.timeoutDescriptor=30000] Time before it is timeout when we are asking
-   * @param  {Number[][]} options.fakeRtt Enabling a way to test our Implementation by fixing all latencies
+   * @param  {Object} options.fakeRtt Enabling a way to test our Implementation by fixing all latencies
    * @param  {Number[][]} options.fakeRtt.latencies Mirror matrix of latencies
    * @param  {Map} options.fakeRtt.revertedName Map of reverted name, each hosts
    * @param  {function} options.fakeRtt.compute Function that return the latency between myInViewId and peerInViewId in latencies and in revertedName
