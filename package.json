@@ -24,7 +24,6 @@
   },
   "homepage": "https://github.com/RAN3D/foglet-overlay#readme",
   "devDependencies": {
-    "foglet-scripts": "git+https://github.com/ran3d/foglet-scripts.git#webpack-custom",
     "karma-firefox-launcher": "^1.0.1",
     "p2p-graph": "^1.2.1"
   },
@@ -37,6 +36,7 @@
   },
   "dependencies": {
     "foglet-core": "git+https://github.com/ran3d/foglet-core.git",
+    "foglet-scripts": "^0.3.0",
     "lodash.isempty": "^4.4.0",
     "lodash.merge": "^4.6.0",
     "serialize-javascript": "^1.4.0",
